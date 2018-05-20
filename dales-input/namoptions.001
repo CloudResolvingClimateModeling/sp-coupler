@@ -1,0 +1,126 @@
+&RUN
+outfile    = 'dales.out'
+iexpnr     =  001
+lwarmstart =  .false.
+startfile  =  'initd00h01m000.001'
+runtime    =  1000000
+trestart   =  80700
+ladaptive  =  .true.
+irandom    =  43
+randthl    =  0.1
+randqt     =  2.5e-5
+nsv        =  2
+nprocx     =  0
+nprocy     =  0
+courant    = .7
+peclet     = .1
+/
+
+&DOMAIN
+itot       =  64
+jtot       =  64
+kmax       =  160
+
+xsize      =  12800.
+ysize      =  12800.
+
+xlat       =  51.96
+xlon       =  4.95
+xday       =  287.
+xtime      =  10.
+/
+
+&PHYSICS
+ustin      =  0.0
+ps         =  100000.00
+thls       =  296.
+wtsurf     =  0.000
+wqsurf     =  0.000000
+lmoist     =  .true.
+isurf      =  4
+iradiation =  0
+useMcICA   =  .true.
+lcoriol    =  .false.
+igrw_damp  =  1
+/
+
+&NAMMICROPHYSICS
+imicro     = 6
+Nc_0       = 200e6
+courantp   = 0.7
+/
+
+&NAMSURFACE
+lmostlocal   = .false.
+lsmoothflux  = .false.
+rsisurf2     = 0.
+
+z0mav        = 0.1
+z0hav        = 0.02
+/
+
+&DYNAMICS
+llsadv     =  .false.
+lqlnr      =  .false.
+cu         =  0.
+cv         =  0.
+
+iadv_mom    =  62
+iadv_tke    =  62
+iadv_thl    =  52
+iadv_qt     =  52
+iadv_sv     =  0,52
+/
+
+&NAMSUBGRID
+lsmagorinsky = .false.
+sgs_surface_fix = .false.
+/
+
+&NAMCHECKSIM
+tcheck      = 0
+/
+
+&NAMSAMPLING
+lsampup     = .false.
+dtav        = 60
+timeav      = 120
+/
+
+&NAMTIMESTAT
+ltimestat   = .true.
+dtav        = 60
+/
+
+&NAMCROSSSECTION
+lcross      = .true.
+crossheight = 2,40,80
+dtav        = 60
+/
+&NAMGENSTAT
+lstat       = .true.
+dtav        = 60
+timeav      = 1800
+/
+&NAMFIELDDUMP
+lfielddump  = .false.
+dtav        = 60
+ldiracc     = .true.
+/
+&NAMSTATTEND
+dtav        = 60
+timeav      = 1800
+ltend       = .false.
+/
+
+&NAMBUDGET
+lbudget = .false.
+dtav    = 60
+timeav  = 1800
+/
+
+&NAMRADSTAT
+lstat = .false.
+dtav = 60
+timeav = 1800
+/
