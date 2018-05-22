@@ -6,11 +6,14 @@
 # 2017-2018
 # 
 
+from __future__ import print_function
 import argparse
 import logging
 
 import os
 import shapely.geometry
+import sys
+import json
 
 from splib import splib, modfac
 
@@ -27,7 +30,6 @@ def readable_dir(dirname):
     if not os.access(dirname, os.R_OK):
         raise argparse.ArgumentTypeError("Input path {0} is not readable".format(dirname))
     return dirname
-
 
 # Splits the input into latitude/longitude pairs
 def parse_lat_lons(coordinate_list):
@@ -148,6 +150,10 @@ def main():
                         default="",
                         help="Space-separated list of polygon corner lat/lon pairs.")
 
+    parser.add_argument("--polyfile", metavar="filename",
+                        default=None,
+                        help="geoJSON file containing a polygon for superparameterization.")
+
     parser.add_argument("--output_poly", metavar="lat1 lon1 ... latn lonn",
                         nargs="+",
                         default="",
@@ -204,7 +210,20 @@ def main():
         geometries.append(shapely.geometry.Polygon(parse_lat_lons(args.poly)))
     if args.all:
         geometries = [shapely.geometry.box(-float("inf"), -float("inf"), float("inf"), float("inf"))]
-
+    # Read geoJSON from file, convert to a shapely object
+    if args.polyfile:
+        try:
+            with open(args.polyfile) as f:
+                print ('Reading polygon from file', args.polyfile)
+                js = json.load(f)
+                for feature in js['features']:
+                    polygon = shapely.geometry.shape(feature['geometry'])
+                    print('  Found polygon', polygon)
+                    geometries.append(polygon)
+        except Exception as e:
+            print('Failed to read or parse the polygon file:', e)
+            sys.exit(1)
+        
     output_geometries = []
     if any(parse_lat_lons(args.output_poly)):
         output_geometries.append(shapely.geometry.Polygon(parse_lat_lons(args.output_poly)))
