@@ -43,6 +43,22 @@ def parse_lat_lons(coordinate_list):
     # over the 0-meridian
 
 
+# read geoJSON, convert to a shapely polygon
+# TODO: Currently returns the first polygon, if many are defined
+def read_poly_file(polyfile):
+    try:
+        with open(polyfile) as f:
+            print ('Reading polygon from file', polyfile)
+            js = json.load(f)
+            for feature in js['features']:
+                polygon = shapely.geometry.shape(feature['geometry'])
+                print('  Found polygon', polygon)
+                return polygon            
+    except Exception as e:
+        print('Failed to read or parse the polygon file:', polyfile, e)
+        sys.exit(1)
+    
+
 # Main function
 def main():
     les_types = [modfac.dales_type, modfac.dummy_type, modfac.ncbased_type]
@@ -160,6 +176,10 @@ def main():
                         help="Designate non-superparametrized columns for inclusion in netCDF output. Space-separated "
                              "list of polygon corner lat/lon pairs.")
 
+    parser.add_argument("--output_polyfile", metavar="filename",
+                        default=None,
+                        help="geoJSON file containing a polygon for statistics output")
+
     parser.add_argument("-a", "--all", action="store_true",
                         default=False,
                         help="Superparametrize all IFS grid columns")
@@ -212,22 +232,17 @@ def main():
         geometries = [shapely.geometry.box(-float("inf"), -float("inf"), float("inf"), float("inf"))]
     # Read geoJSON from file, convert to a shapely object
     if args.polyfile:
-        try:
-            with open(args.polyfile) as f:
-                print ('Reading polygon from file', args.polyfile)
-                js = json.load(f)
-                for feature in js['features']:
-                    polygon = shapely.geometry.shape(feature['geometry'])
-                    print('  Found polygon', polygon)
-                    geometries.append(polygon)
-        except Exception as e:
-            print('Failed to read or parse the polygon file:', e)
-            sys.exit(1)
+        p = read_poly_file(args.polyfile)        
+        geometries.append(p)
         
     output_geometries = []
     if any(parse_lat_lons(args.output_poly)):
         output_geometries.append(shapely.geometry.Polygon(parse_lat_lons(args.output_poly)))
+    if args.output_polyfile:
+        p = read_poly_file(args.output_polyfile)        
+        output_geometries.append(p)
 
+        
     splib.read_config(args.conf)
 
     splib.initialize(args.__dict__, geometries, output_geometries)
