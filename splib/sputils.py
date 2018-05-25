@@ -42,6 +42,7 @@ def find_closest_points(points, target):
 
 # Retrieves the super-parametrized indices from the input mask geometries.
 def get_mask_indices(points, mask_geoms, nmax=-1):
+    
     if nmax == 0:
         return []  # requested no points
     result = []
@@ -51,7 +52,7 @@ def get_mask_indices(points, mask_geoms, nmax=-1):
         dists = [haversine.haversine((p[0], p[1]), (g.x, g.y)) for p in points]
         return numpy.argsort(dists)[:nmax] if nmax > 0 else [numpy.argsort(dists)[0]]
     else:
-        # many geometries. points now select only one grid index.
+        # many geometries or not a single point. points now select only one grid index.
         for g in mask_geoms:
             if isinstance(g, shapely.geometry.Point):
                 dists = [haversine.haversine((p[0], p[1]), (g.x, g.y)) for p in points]
@@ -59,6 +60,12 @@ def get_mask_indices(points, mask_geoms, nmax=-1):
             else:
                 for i in range(len(points)):
                     if g.contains(shapely.geometry.Point(points[i])): result.append(i)
+
+                    # try also with the grid point mapped to the -180 ... 180 interval
+                    # 
+                    p = ((points[i][0] -180) % 360 - 180, points[i][1])
+                    if g.contains(shapely.geometry.Point(p)): result.append(i)
+                    
         result = list(set(result))  # remove duplicates
         return result
 

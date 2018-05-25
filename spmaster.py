@@ -45,6 +45,9 @@ def parse_lat_lons(coordinate_list):
 
 # read geoJSON, convert to a shapely polygon
 # TODO: Currently returns the first polygon, if many are defined
+# the openIFS grid points are defined with longitudes in the range 0...360
+# when drawing in Qgis, a natural range is -180 to 180.
+# get_mask_indices in sputils.py tries both mappings when testing for point-in-polygon.
 def read_poly_file(polyfile):
     try:
         with open(polyfile) as f:
