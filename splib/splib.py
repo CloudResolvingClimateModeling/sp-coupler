@@ -296,7 +296,8 @@ def step(work_queue=None):
 
     set_les_forcings_walltime = -time.time()
     for les in les_models:
-        spcpl.set_les_forcings(les, gcm_model, dt_gcm=delta_t, factor=les_forcing_factor, couple_surface=cplsurf)
+        spcpl.set_les_forcings(les, gcm_model, dt_gcm=delta_t, factor=les_forcing_factor,
+                               couple_surface=cplsurf, qt_forcing=qt_forcing)
     set_les_forcings_walltime += time.time()
         
     # step les models to the end time of the current GCM step = t + delta_t
@@ -340,7 +341,8 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
 
     set_les_forcings_walltime = -time.time()
     for les in les_list:
-        spcpl.set_les_forcings(les, gcm, dt_gcm=spinup_length, factor=les_spinup_forcing_factor, couple_surface=cplsurf)
+        spcpl.set_les_forcings(les, gcm, dt_gcm=spinup_length, factor=les_spinup_forcing_factor,
+                               couple_surface=cplsurf, qt_forcing=qt_forcing)
     set_les_forcings_walltime += time.time()
         
     # step les models

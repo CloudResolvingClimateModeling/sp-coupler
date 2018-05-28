@@ -239,7 +239,7 @@ def set_les_state(les, u, v, thl, qt, ps=None):
 
 # Computes and applies the forcings to the les model before time stepping,
 # relaxing it toward the gcm mean state.
-def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface):
+def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     u, v, thl, qt, ps, ql = convert_profiles(les)
 
     # get dales slab averages
@@ -292,11 +292,12 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface):
         spio.write_les_data(les, TLflux=les.TLflux, TSflux=les.TSflux,
                             SHflux=les.SHflux, QLflux=les.QLflux, QIflux=les.QIflux)
 
-    if les.get_model_time() > 0 | units.s:
-        starttime = time.time()
-        variability_nudge(les, gcm)
-        walltime = time.time() - starttime
-        log.info("variability nudge took %6.2f s"%walltime)
+    if qt_forcing == 'variance':
+        if les.get_model_time() > 0 | units.s:
+            starttime = time.time()
+            variability_nudge(les, gcm)
+            walltime = time.time() - starttime
+            log.info("variability nudge took %6.2f s"%walltime)
 
 
 # Computes the LES tendencies upon the GCM:
@@ -425,7 +426,9 @@ def write_les_profiles(les):
                         ql_ice=ql_ice_d, ql_water=ql_water_d, thl=thl_d,
                         t=t, t_=t_d, qr=qr_d)
 
- 
+
+# TODO this routine sometimes hangs for a very long time, especially if it is called when
+# variance nudging is not enabled in the LES
 def variability_nudge(les, gcm):
     # this cannot be used before the LES has been stepped - otherwise qsat and ql are not defined.
     
