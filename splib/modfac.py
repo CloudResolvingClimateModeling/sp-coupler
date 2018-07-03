@@ -35,11 +35,19 @@ def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", chann
         from omuse.community.oifs.interface import OpenIFS
 
         if not restart:
-            files = [f for f in glob.glob(os.path.join(inputdir, "*")) if not f.endswith("fort.4")]
+            # some files cannot be linked:
+            #   fort.4 is patched before the run
+            #   ncf927 is written to by openIFS. We copy it, if it exists in the input dir
+            files = [f for f in glob.glob(os.path.join(inputdir, "*"))
+                     if not (f.endswith("fort.4") or f.endswith("ncf927")) ]
             log.info("Linking OpenIFS input files from %s...\n Files: %s" % (inputdir, ' '.join(files)))
             log.info("Workdir:%s" % workdir)
             sputils.link_dir(files, workdir)
             shutil.copy(os.path.join(inputdir, "fort.4"), workdir)
+            try:
+                shutil.copy(os.path.join(inputdir, "ncf927"), workdir)
+            except:
+                pass
 
         oifs = OpenIFS(number_of_workers=nprocs,
                        redirection=redirect,

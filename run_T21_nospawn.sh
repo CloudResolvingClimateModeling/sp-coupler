@@ -20,8 +20,8 @@ mpiexec -n 1 python2 ./spmaster.py --steps 5  \
 --gcmdir=$OIFSDIR --gcmexp=TEST \
 --lesdir=$DALESDIR --odir=$OUT --cplsurf \
 --channel=nospawn : \
--n $N_GCM ../oifs/openifs_worker : \
--n $((N_LES*LES_PROCS)) ../dales/dales_worker
+-n $N_GCM               ../amuse/src/omuse/community/oifs/openifs_worker : \
+-n $((N_LES*LES_PROCS)) ../amuse/src/omuse/community/dales/dales_worker
 
 
 # --spinup 14400 --spinup_steps 16
