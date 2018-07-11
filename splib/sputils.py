@@ -1,5 +1,8 @@
 import numpy
 import os
+from omuse.units import units
+from amuse.units.quantities import to_quantity
+
 import logging
 import haversine
 import shapely.geometry
@@ -8,14 +11,13 @@ import shapely.geometry
 log = logging.getLogger(__name__)
 
 # Physical constants
-pref0 = 1e5  # Pa reference pressure
-rd = 287.04  # gas constant for dry air.  J/kg K.
-rv = 461.5  # gas constant for water vapor. J/kg K.
-cp = 1004.  # specific heat at constant pressure (dry air). J/kgK
-rlv = 2.53e6  # latent heat for vaporisation
-grav = 9.81  # gravity acceleration. m/s^2
-mair = 28.967  # Molar mass of air g/mol
-
+pref0 = 1e5 | units.Pa    # Pa reference pressure
+rd    = 287.04 | units.J/units.kg/units.K # gas constant for dry air.  J/kg K.
+rv    = 461.5 | units.J/units.kg/units.K   # gas constant for water vapor. J/kg K.
+cp    = 1004. | units.J/units.kg/units.K   # specific heat at constant pressure (dry air).
+rlv   = 2.53e6 | units.J/units.kg   # latent heat for vaporisation
+grav  = 9.81  | units.m/units.s**2  # gravity acceleration. m/s^2
+mair  = 28.967 | units.g/units.mol # Molar mass of air
 
 # Root mean square
 def rms(a):
@@ -76,3 +78,14 @@ def link_dir(files, workdir):
     for f in files:
         fname = os.path.basename(f)
         os.symlink(os.path.abspath(f), os.path.join(workdir, fname))
+
+def interp(x,xp,fp,**kwargs):
+    x=to_quantity(x)
+    xp=to_quantity(xp)
+    fp=to_quantity(fp)
+    return numpy.interp(x.value_in(x.unit), xp.value_in(x.unit), fp.number, **kwargs) | fp.unit
+  
+def searchsorted(a,v,**kwargs):
+    a=to_quantity(a)
+    v=to_quantity(v)
+    return numpy.searchsorted(a.value_in(a.unit), v.value_in(a.unit), **kwargs)

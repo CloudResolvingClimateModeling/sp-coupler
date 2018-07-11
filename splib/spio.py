@@ -3,7 +3,7 @@ import time
 import threading
 import netCDF4
 import logging
-from amuse.community import units
+from omuse.units import units
 
 # open a netcdf file for storing lwp fields and vertical profiles
 # needs the oifs instance and one les instance for axis information.

@@ -3,10 +3,11 @@ from __future__ import print_function
 import time
 import numpy
 import logging
-from amuse.community import units
+from omuse.units import units
 import sputils
 import spio
-import scipy.optimize
+from scipy.optimize import brentq
+#~ from brent import brentq
 
 # Logger
 log = logging.getLogger(__name__)
@@ -18,8 +19,8 @@ log = logging.getLogger(__name__)
 def get_cloud_fraction(les):
     # construct a mapping of indices between openIFS levels and Dales height levels
     Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.
-    zh = les.zh.value_in(units.m)
-    indices = numpy.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
+    zh = les.zh
+    indices = sputils.searchsorted(zh, Zh, side = "right")[:-1:][::-1] # find indices in zh corresponding to Oifs levels
     # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     A = les.get_cloudfraction(indices)[::-1]  # reverse order
     return A
@@ -59,18 +60,16 @@ def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None)
         if not any(cols):
             profile_data[gcm_var] = []
         else:
-            unit = cpl_units.get(gcm_var, None)
             data = gcm.get_profile_fields(gcm_var, cols)
-            profile_data[gcm_var] = data.value_in(unit) if unit else data
+            profile_data[gcm_var] = data
     # Retrieve fluxes...
     if couple_surface:
         for surf_var in surf_vars:
             if not any(cols):
                 surface_data[surf_var] = []
             else:
-                unit = cpl_units.get(surf_var, None)
                 data = gcm.get_surface_field(surf_var, cols)
-                surface_data[surf_var] = data.value_in(unit) if unit else data
+                surface_data[surf_var] = data
 
     walltime = time.time() - start
     log.info("Fetching gcm data took %d s" % walltime)
@@ -152,7 +151,7 @@ def convert_profiles(les, write=True):
     # 0 is at the end of the list, therefore reverse lists before and after.
     Zh = numpy.cumsum(dZ[::-1])[::-1]
 
-    Zh = numpy.append(Zh, 0)  # append a 0 for ground
+    Zh.append(0 | units.m) # append a 0 for ground
 
     # height of full levels - simply average half levels (for now)
     # better: use full level pressure to calculate height?
@@ -172,20 +171,31 @@ def convert_profiles(les, write=True):
     #   Zf must be increasing, so reverse the gcm arrays
     #   outside the range of Zf, interp returns the first or the last point of the range
 
-    h = les.zf.value_in(units.m)
+    h = les.zf
 
-    thl = numpy.interp(h, Zf[::-1], thl_[::-1])
-    qt = numpy.interp(h, Zf[::-1], qt_[::-1])
-    ql = numpy.interp(h, Zf[::-1], QL[::-1])
-    u = numpy.interp(h, Zf[::-1], U[::-1])
-    v = numpy.interp(h, Zf[::-1], V[::-1])
+    thl = sputils.interp(h, Zf[::-1], thl_[::-1]) 
+    qt  = sputils.interp(h, Zf[::-1], qt_[::-1])
+    ql  = sputils.interp(h, Zf[::-1], QL[::-1])
+    u   = sputils.interp(h, Zf[::-1], U[::-1])
+    v   = sputils.interp(h, Zf[::-1], V[::-1])
 
     if write:
-        spio.write_les_data(les, U=U, V=V, T=T, SH=SH, QL=QL, QI=QI,
-                            Pf=Pf, Ph=Ph[1:], Zf=Zf, Zh=Zh[1:],
-                            Psurf=Ph[-1], Tv=Tv, THL=thl_, QT=qt_)
+        spio.write_les_data(les,  U = U.value_in(units.m/units.s),
+                                  V = V.value_in(units.m/units.s),
+                                  T = T.value_in(units.K),
+                                  SH = SH.value_in(units.shu),
+                                  QL = QL.value_in(units.mfu),
+                                  QI = QI.value_in(units.mfu), #A.value_in(units.ccu)
+                                  Pf = Pf.value_in(units.Pa),
+                                  Ph = Ph[1:].value_in(units.Pa),
+                                  Zf = Zf.value_in(units.m),
+                                  Zh = Zh[1:].value_in(units.m),
+                                  Psurf = Ph[-1].value_in(units.Pa),
+                                  Tv = Tv.value_in(units.K),
+                                  THL = thl_.value_in(units.K),
+                                  QT = qt_.value_in(units.mfu))
 
-    return u, v, thl, qt, Ph[-1] | units.Pa, ql
+    return u,v,thl,qt,Ph[-1], ql
 
 
 # calculates QT and THL etc for GCM profiles for extra output columns
@@ -217,7 +227,6 @@ def output_column_conversion(profile):
 # is u, v, thl, qt are vertical profiles, numpy broadcasting stretch them to 3D fields
 # The values are randomly perturbed in the interval [-w,w]
 # TODO check w with DALES input files
-
 def set_les_state(les, u, v, thl, qt, ps=None):
     # tiny noise used until feb 2018
     # vabsmax,qabsmax = 0.001,0.00001
@@ -227,11 +236,13 @@ def set_les_state(les, u, v, thl, qt, ps=None):
     # les.set_field('QT',  numpy.random.uniform(-qabsmax, qabsmax, (les.itot, les.jtot, les.k)) + qt)
 
     # more noise, according to Dales defaults. qabsmax defaults to 1e-5, 2.5e-5 is from a namoptions file
-    vabsmax, thlabsmax, qabsmax = 0.5, 0.1, 2.5e-5
-    les.set_field('U', numpy.random.uniform(-vabsmax, vabsmax, (les.itot, les.jtot, les.k)) + u)
-    les.set_field('V', numpy.random.uniform(-vabsmax, vabsmax, (les.itot, les.jtot, les.k)) + v)
-    les.set_field('THL', numpy.random.uniform(-thlabsmax, thlabsmax, (les.itot, les.jtot, les.k)) + thl)
-    les.set_field('QT', numpy.random.uniform(-qabsmax, qabsmax, (les.itot, les.jtot, les.k)) + qt)
+    vabsmax = 0.5 | units.m/units.s
+    thlabsmax = 0.1 | units.K
+    qabsmax = 2.5e-5 | units.mfu
+    les.set_field('U',   vabsmax*numpy.random.uniform(-1., 1., (les.itot, les.jtot, les.k)) + u)
+    les.set_field('V',   vabsmax*numpy.random.uniform(-1., 1., (les.itot, les.jtot, les.k)) + v)
+    les.set_field('THL', thlabsmax*numpy.random.uniform(-1., 1., (les.itot, les.jtot, les.k)) + thl)
+    les.set_field('QT',  qabsmax*numpy.random.uniform(-1., 1., (les.itot, les.jtot, les.k)) + qt)
 
     if ps:
         les.set_surface_pressure(ps)
@@ -243,9 +254,9 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     u, v, thl, qt, ps, ql = convert_profiles(les)
 
     # get dales slab averages
-    u_d = les.get_profile_U().value_in(units.m / units.s)
-    v_d = les.get_profile_V().value_in(units.m / units.s)
-    thl_d = les.get_profile_THL().value_in(units.K)
+    u_d = les.get_profile_U()
+    v_d = les.get_profile_V()
+    thl_d = les.get_profile_THL()
     qt_d = les.get_profile_QT()
     ql_d = les.get_profile_QL()
     ps_d = les.get_surface_pressure()
@@ -267,7 +278,10 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     # log.info("  qt : %f" % (sputils.rms(f_qt)*dt_gcm))
 
     # store forcings on dales in the statistics
-    spio.write_les_data(les, f_u=f_u, f_v=f_v, f_thl=f_thl, f_qt=f_qt)
+    spio.write_les_data(les,f_u = f_u.value_in(units.m/units.s**2),
+                            f_v = f_v.value_in(units.m/units.s**2),
+                            f_thl = f_thl.value_in(units.K/units.s),
+                            f_qt = f_qt.value_in(units.mfu/units.s))
 
     # set tendencies for Dales
     les.set_tendency_U(f_u)
@@ -301,15 +315,16 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
 
 
 # Computes the LES tendencies upon the GCM:
-def set_gcm_tendencies(gcm, les, factor=1):
+def set_gcm_tendencies(gcm,les,factor = 1):
+
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.zf.value_in(units.m)
-    u_d = les.get_profile_U().value_in(units.m / units.s)
-    v_d = les.get_profile_V().value_in(units.m / units.s)
-    sp_d = les.get_presf().value_in(units.Pa)
-    thl_d = les.get_profile_THL().value_in(units.K)
+    h = les.zf
+    u_d = les.get_profile_U()
+    v_d = les.get_profile_V()
+    sp_d = les.get_presf()
+    thl_d = les.get_profile_THL()
     qt_d = les.get_profile_QT()
     ql_d = les.get_profile_QL()
     ql_ice_d = les.get_profile_QL_ice()  # ql_ice is the ice part of QL
@@ -320,55 +335,62 @@ def set_gcm_tendencies(gcm, les, factor=1):
     # dales.cdf.variables['presh'][gcm.step] = dales.get_presh().value_in(units.Pa) # todo associate with zh in netcdf
 
     # calculate real temperature from Dales' thl, qt, using the pressures from openIFS
-    pf = numpy.interp(h, Zf[::-1], Pf[::-1])
-    t = thl_d * sputils.exner(pf) + sputils.rlv * ql_d / sputils.cp
+    pf   = sputils.interp(h,Zf[::-1],Pf[::-1])
+    t    = thl_d * sputils.exner(pf) + sputils.rlv * ql_d / sputils.cp
 
     # get real temperature from Dales - note it is calculated internally from thl and ql
-    t_d = les.get_profile_T().value_in(units.K)
+    t_d = les.get_profile_T()
 
-    spio.write_les_data(les, u=u_d, v=v_d, presf=sp_d, qt=qt_d, ql=ql_d,
-                        ql_ice=ql_ice_d, ql_water=ql_water_d, thl=thl_d,
-                        t=t, t_=t_d, qr=qr_d)
+    spio.write_les_data(les,u = u_d.value_in(units.m/units.s),
+                            v = v_d.value_in(units.m/units.s),
+                            presf = sp_d.value_in(units.Pa),
+                            qt = qt_d.value_in(units.mfu),
+                            ql = ql_d.value_in(units.mfu),
+                            ql_ice = ql_ice_d.value_in(units.mfu),
+                            ql_water = ql_water_d.value_in(units.mfu),
+                            thl = thl_d.value_in(units.K),
+                            t = t.value_in(units.K),
+                            t_ = t_d.value_in(units.K),
+                            qr = qr_d.value_in(units.mfu))
 
     # forcing
-    ft = gcm.get_timestep().value_in(units.s)  # should be the length of the NEXT time step
+    ft = gcm.get_timestep() # should be the length of the NEXT time step
 
     # interpolate to GCM heights
-    t_d = numpy.interp(Zf, h, t_d)
-    qt_d = numpy.interp(Zf, h, qt_d)
-    ql_d = numpy.interp(Zf, h, ql_d)
-    ql_water_d = numpy.interp(Zf, h, ql_water_d)
-    ql_ice_d = numpy.interp(Zf, h, ql_ice_d)
-    u_d = numpy.interp(Zf, h, u_d)
-    v_d = numpy.interp(Zf, h, v_d)
+    t_d = sputils.interp(Zf,h,t_d)
+    qt_d = sputils.interp(Zf,h,qt_d)
+    ql_d = sputils.interp(Zf,h,ql_d)
+    ql_water_d = sputils.interp(Zf,h,ql_water_d)
+    ql_ice_d = sputils.interp(Zf,h,ql_ice_d)
+    u_d = sputils.interp(Zf,h,u_d)
+    v_d = sputils.interp(Zf,h,v_d)
+    
+    
+    # log.info("Height of LES system: %f" % h[-1])
+    # first index in the openIFS colum which is inside the Dales system
+    start_index=sputils.searchsorted(-Zf,-h[-1])
 
-    les_height = h[-1]
-    # log.info("Height of LES system: %f" % les_height)
-    i = 0
-    for i in range(0, len(Zf)):
-        if Zf[i] < les_height:
-            break
-    start_index = i  # first index in the openIFS column which is inside the Dales system
     # log.info("start_index: %d" % start_index)
 
-    f_T = factor * (t_d - T) / ft
-    f_SH = factor * ((qt_d - ql_d) - SH) / ft  # !!!!! -ql_d here - SH is vapour only.
-    f_QL = factor * (ql_water_d - QL) / ft  # condensed liquid water
-    f_QI = factor * (ql_ice_d - QI) / ft  # condensed water as ice
-    # f_QL = factor * (ql_d - (QL+QI)) / ft dales QL is both liquid and ice - f_QL is liquid only. this conserves
-    # water mass but makes an error in latent heat.
-    f_U = factor * (u_d - U) / ft
-    f_V = factor * (v_d - V) / ft
-    f_A = factor * (A_d - A) / ft
+    f_T  = factor * (t_d  - T)  / ft
+    f_SH = factor * ((qt_d - ql_d) - SH) / ft   # !!!!! -ql_d here - SH is vapour only.
+    f_QL = factor * (ql_water_d - QL) / ft      # condensed liquid water
+    f_QI = factor * (ql_ice_d   - QI) / ft      # condensed water as ice
+#   f_QL = factor * (ql_d - (QL+QI)) / ft
+#   dales QL is both liquid and ice - f_QL is liquid only. this conserves water mass but makes an error in latent heat.
+    f_U  = factor * (u_d  - U)  / ft
+    f_V  = factor * (v_d  - V)  / ft
+    f_A  = factor * (A_d  - A)  / ft
 
-    f_T[0:start_index] = 0  # zero out the forcings above the Dales system
-    f_SH[0:start_index] = 0  # TODO : taper off smoothly instead
-    f_QL[0:start_index] = 0
-    f_QI[0:start_index] = 0
-    f_U[0:start_index] = 0
-    f_V[0:start_index] = 0
-    f_A[0:start_index] = 0
+    f_T[0:start_index]  *= 0   # zero out the forcings above the Dales system
+    f_SH[0:start_index] *= 0   # TODO : taper off smoothly instead
+    f_QL[0:start_index] *= 0
+    f_QI[0:start_index] *= 0
+    f_U[0:start_index]  *= 0
+    f_V[0:start_index]  *= 0
+    f_A[0:start_index]  *= 0
 
+    # careful with double coriolis
     gcm.set_profile_tendency("U", les.grid_index, f_U)
     gcm.set_profile_tendency("V", les.grid_index, f_V)
     gcm.set_profile_tendency("T", les.grid_index, f_T)
@@ -378,12 +400,17 @@ def set_gcm_tendencies(gcm, les, factor=1):
     gcm.set_profile_tendency("A", les.grid_index, f_A)
 
     # store forcings on GCM in the statistics in the corresponding LES group
-    spio.write_les_data(les, f_U=f_U, f_V=f_V, f_T=f_T, f_SH=f_SH, A=A, f_QL=f_QL, f_QI=f_QI)
-
+    spio.write_les_data(les,f_U = f_U.value_in(units.m/units.s**2),
+                            f_V = f_V.value_in(units.m/units.s**2),
+                            f_T = f_T.value_in(units.K/units.s),
+                            f_SH = f_SH.value_in(units.shu/units.s),
+                            A = A.value_in(units.ccu),
+                            f_QL=f_QL.value_in(units.mfu/units.s), 
+                            f_QI=f_QI.value_in(units.mfu/units.s))
 
 def set_gcm_tendencies_from_file(gcm, les):
-    t = gcm.get_model_time().value_in(units.s)
-    ti = (numpy.abs(spio.cdf_root.variables['Time'] - t)).argmin()
+    t = gcm.get_model_time()
+    ti = abs((spio.cdf_root.variables['Time'] | units.s)  - t).argmin()
 
     print('set_gcm_tendencies_from_file()', t, ti, spio.cdf_root.variables['Time'][ti])
     
@@ -401,11 +428,11 @@ def write_les_profiles(les):
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.zf.value_in(units.m)
-    u_d = les.get_profile_U().value_in(units.m / units.s)
-    v_d = les.get_profile_V().value_in(units.m / units.s)
-    sp_d = les.get_presf().value_in(units.Pa)
-    thl_d = les.get_profile_THL().value_in(units.K)
+    h = les.zf
+    u_d = les.get_profile_U()
+    v_d = les.get_profile_V()
+    sp_d = les.get_presf()
+    thl_d = les.get_profile_THL()
     qt_d = les.get_profile_QT()
     ql_d = les.get_profile_QL()
     ql_ice_d = les.get_profile_QL_ice()  # ql_ice is the ice part of QL
@@ -437,8 +464,8 @@ def variability_nudge(les, gcm):
     ql2 = les.get_profile("QL")
 
     qt_av = les.get_profile("QT")
-    
-    ql = numpy.sum(numpy.maximum(qt - qsat, 0), axis=(0,1)) / (les.itot * les.jtot)
+
+    ql = (qt - qsat).maximum(0 | units.mfu).sum(axis=(0,1)) / (les.itot * les.jtot)
 
     # print('---', les.lat, les.lon, '---')
     # print(les.QL)
@@ -451,7 +478,8 @@ def variability_nudge(les, gcm):
     # get ql difference
     # note the implicit k, qt, qt_av, qsat variables
     def get_ql_diff(beta):
-        return numpy.sum(numpy.maximum( beta*(qt[:,:,k]-qt_av[k]) + qt_av[k] - qsat[:,:,k], 0)) / (les.itot * les.jtot) - les.ql_ref[k]
+        result=(beta*(qt[:,:,k]-qt_av[k]) + qt_av[k] - qsat[:,:,k]).maximum(0 | units.mfu).sum() / (les.itot * les.jtot) - les.ql_ref[k]
+        return result.number
 
     beta_min = 0 # search interval
     beta_max = 2000
@@ -466,10 +494,10 @@ def variability_nudge(les, gcm):
             q_max = get_ql_diff(beta_max)
             if q_min > 0 or q_max < 0:
                 log.info("k:%d didn't bracket a zero. qmin:%f, qmax:%f, qt_avg:%f, stdev(qt):%f "%
-                         (k, q_min, q_max, numpy.mean(qt[:,:,k]), numpy.std(qt[:,:,k])))
+                         (k, q_min, q_max, numpy.mean(qt[:,:,k]).number, numpy.std(qt[:,:,k]).number))
                 # seems to happen easily in the sponge layer, where the variability is kept small
                 continue
-            beta[k] = scipy.optimize.brentq(get_ql_diff, beta_min, beta_max)
+            beta[k] = brentq(get_ql_diff, beta_min, beta_max)
 
         elif ql[k] > les.ql_ref[k]: # The GCM says no clouds, or very little, and the LES has more than this. 
                                     # Nudge towards barely unsaturated.
@@ -489,9 +517,8 @@ def variability_nudge(les, gcm):
     alpha = numpy.log(beta) / gcm.get_timestep()
     les.set_qt_variability_factor(alpha)
 
-    qt_std = numpy.std(qt, axis=(0,1)) 
+    qt_std = qt.std(axis=(0,1))
 
     spio.write_les_data(les, qt_alpha=alpha.value_in(1/units.s))
-    spio.write_les_data(les, qt_beta=beta, qt_std=qt_std)
+    spio.write_les_data(les, qt_beta=beta, qt_std=qt_std.value_in(units.mfu))
                         
-    

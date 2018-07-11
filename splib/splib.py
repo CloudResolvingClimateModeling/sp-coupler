@@ -100,6 +100,10 @@ def initialize(config, geometries, output_geometries=None):
 
     read_config(config)
 
+    if os.path.exists(output_dir):
+      raise Exception("output dir %s exists"%output_dir) 
+
+
     # if output_name is a relative path (as by default),
     # treat it as relative to output_dir
     if not os.path.isabs(output_name):
@@ -292,7 +296,7 @@ def step(work_queue=None):
     spcpl.gather_gcm_data(gcm_model, les_models, cplsurf, output_column_indices)
     gather_gcm_data_walltime += time.time()
     
-    delta_t = gcm_model.get_timestep().value_in(units.s)
+    delta_t = gcm_model.get_timestep()
 
     set_les_forcings_walltime = -time.time()
     for les in les_models:
@@ -301,7 +305,7 @@ def step(work_queue=None):
     set_les_forcings_walltime += time.time()
         
     # step les models to the end time of the current GCM step = t + delta_t
-    les_wall_times = step_les_models(t + (delta_t | units.s), work_queue, offset=les_spinup)
+    les_wall_times = step_les_models(t + delta_t, work_queue, offset=les_spinup)
 
     set_gcm_tendencies_walltime = -time.time()
     # get les state - for forcing on OpenIFS and les stats
