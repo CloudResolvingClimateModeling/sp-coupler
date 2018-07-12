@@ -247,7 +247,6 @@ def set_les_state(les, u, v, thl, qt, ps=None):
     if ps:
         les.set_surface_pressure(ps)
 
-
 # Computes and applies the forcings to the les model before time stepping,
 # relaxing it toward the gcm mean state.
 def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
@@ -260,7 +259,7 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     qt_d = les.get_profile_QT()
     ql_d = les.get_profile_QL()
     ps_d = les.get_surface_pressure()
-    # ft = dt  # forcing time constant
+    #ft = dt  # forcing time constant
 
     # forcing
     f_u = factor * (u - u_d) / dt_gcm
@@ -443,16 +442,24 @@ def write_les_profiles(les):
     # dales.cdf.variables['presh'][gcm.step] = dales.get_presh().value_in(units.Pa) # todo associate with zh in netcdf
 
     # calculate real temperature from Dales' thl, qt, using the pressures from openIFS
-    pf = numpy.interp(h, Zf[::-1], Pf[::-1])
+    pf = sputils.interp(h, Zf[::-1], Pf[::-1])
     t = thl_d * sputils.exner(pf) + sputils.rlv * ql_d / sputils.cp
 
     # get real temperature from Dales - note it is calculated internally from thl and ql
-    t_d = les.get_profile_T().value_in(units.K)
+    t_d = les.get_profile_T()
 
-    spio.write_les_data(les, u=u_d, v=v_d, presf=sp_d, qt=qt_d, ql=ql_d,
-                        ql_ice=ql_ice_d, ql_water=ql_water_d, thl=thl_d,
-                        t=t, t_=t_d, qr=qr_d)
-
+    spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
+                             v=v_d.value_in(units.m / units.s), 
+                             presf=sp_d.value_in(units.Pa), 
+                             qt=qt_d, 
+                             ql=ql_d,
+                             ql_ice=ql_ice_d,
+                             ql_water=ql_water_d,
+                             thl=thl_d.value_in(units.K),
+                             t=t.value_in(units.K), 
+                             t_=t_d.value_in(units.K), 
+                             qr=qr_d)
+ 
 
 # TODO this routine sometimes hangs for a very long time, especially if it is called when
 # variance nudging is not enabled in the LES
