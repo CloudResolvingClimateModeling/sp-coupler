@@ -301,9 +301,19 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
         les.set_z0h_surf(z0h)
         les.set_wt_surf(wt)
         les.set_wq_surf(wq)
-        spio.write_les_data(les, z0m=z0m, z0h=z0h, wthl=wt, wqt=wq)
-        spio.write_les_data(les, TLflux=les.TLflux, TSflux=les.TSflux,
-                            SHflux=les.SHflux, QLflux=les.QLflux, QIflux=les.QIflux)
+        spio.write_les_data(les,
+                            z0m=z0m.value_in(units.m),
+                            z0h=z0h.value_in(units.m),
+                            wthl=wt.value_in(units.m * units.s**-1 * units.K),
+                            wqt=wq.value_in(units.m / units.s))
+
+        # ToDo - unit conversion problems...
+#        spio.write_les_data(les,
+#                            TLflux=les.TLflux,
+#                            TSflux=les.TSflux,
+#                            SHflux=les.SHflux, 
+#                            QLflux=les.QLflux,
+#                            QIflux=les.QIflux)
 
     if qt_forcing == 'variance':
         if les.get_model_time() > 0 | units.s:
