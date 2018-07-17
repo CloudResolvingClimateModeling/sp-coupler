@@ -307,13 +307,12 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
                             wthl=wt.value_in(units.m * units.s**-1 * units.K),
                             wqt=wq.value_in(units.m / units.s))
 
-        # ToDo - unit conversion problems...
-#        spio.write_les_data(les,
-#                            TLflux=les.TLflux,
-#                            TSflux=les.TSflux,
-#                            SHflux=les.SHflux, 
-#                            QLflux=les.QLflux,
-#                            QIflux=les.QIflux)
+        spio.write_les_data(les,
+                            TLflux=les.TLflux.value_in(units.W / units.m**2),
+                            TSflux=les.TSflux.value_in(units.W / units.m**2),
+                            SHflux=les.SHflux.value_in(units.kg / units.m**2 / units.s),
+                            QLflux=les.QLflux.value_in(units.kg / units.m**2 / units.s),
+                            QIflux=les.QIflux.value_in(units.kg / units.m**2 / units.s))
 
     if qt_forcing == 'variance':
         if les.get_model_time() > 0 | units.s:
