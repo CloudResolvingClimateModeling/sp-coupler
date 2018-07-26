@@ -460,14 +460,14 @@ def write_les_profiles(les):
     spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
                              v=v_d.value_in(units.m / units.s), 
                              presf=sp_d.value_in(units.Pa), 
-                             qt=qt_d, 
-                             ql=ql_d,
-                             ql_ice=ql_ice_d,
-                             ql_water=ql_water_d,
+                             qt=qt_d.value_in(units.mfu), 
+                             ql=ql_d.value_in(units.mfu),
+                             ql_ice=ql_ice_d.value_in(units.mfu),
+                             ql_water=ql_water_d.value_in(units.mfu),
                              thl=thl_d.value_in(units.K),
                              t=t.value_in(units.K), 
                              t_=t_d.value_in(units.K), 
-                             qr=qr_d)
+                             qr=qr_d.value_in(units.mfu))
  
 
 # TODO this routine sometimes hangs for a very long time, especially if it is called when

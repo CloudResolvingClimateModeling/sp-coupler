@@ -345,7 +345,7 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
 
     set_les_forcings_walltime = -time.time()
     for les in les_list:
-        spcpl.set_les_forcings(les, gcm, dt_gcm=spinup_length, factor=les_spinup_forcing_factor,
+        spcpl.set_les_forcings(les, gcm, dt_gcm=spinup_length| units.s, factor=les_spinup_forcing_factor,
                                couple_surface=cplsurf, qt_forcing=qt_forcing)
     set_les_forcings_walltime += time.time()
         
