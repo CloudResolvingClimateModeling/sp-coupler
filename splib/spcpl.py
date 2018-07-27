@@ -90,13 +90,43 @@ def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None)
             cdfname = var_to_netcdf_name.get(varname, varname)
             C[cdfname] = profile_data[varname][i + len(les_models)][:]
         output_column_conversion(C)
+        spio.write_netCDF_data(col,  U = C['U'].value_in(units.m/units.s),
+                                  V = C['V'].value_in(units.m/units.s),
+                                  T = C['T'].value_in(units.K),
+                                  SH = C['SH'].value_in(units.shu),
+                                  QL = C['QL'].value_in(units.mfu),
+                                  QI = C['QI'].value_in(units.mfu), #A.value_in(units.ccu)
+                                  Pf = C['Pf'].value_in(units.Pa),
+                                  Ph = C['Ph'].value_in(units.Pa),
+                                  # Zf = C['Zf'].value_in(units.m),
+                                  Zh = C['Zh'].value_in(units.m),
+                                  Psurf = C['Psurf'].value_in(units.Pa),
+                                  Tv = C['Tv'].value_in(units.K),
+                                  THL = C['THL'].value_in(units.K),
+                                  QT = C['QT'].value_in(units.mfu))
+
+        
+        
         if couple_surface:
             for varname in surf_vars:
-                cdfname = var_to_netcdf_name.get(varname, varname)
-                C[cdfname] = surface_data[varname][i + len(les_models)]
+                C[varname] = surface_data[varname][i + len(les_models)]
             C['z0m'], C['z0h'], C['wthl'], C['wqt'] = convert_surface_fluxes(C)
 
-        spio.write_netCDF_data(col, **C)
+
+            spio.write_netCDF_data(col,
+                                   z0m=C['z0m'].value_in(units.m),
+                                   z0h=C['z0h'].value_in(units.m),
+                                   wthl=C['wthl'].value_in(units.m * units.s**-1 * units.K),
+                                   wqt=C['wqt'].value_in(units.m / units.s))
+
+            spio.write_netCDF_data(col,
+                                   TLflux=C['TLflux'].value_in(units.W / units.m**2),
+                                   TSflux=C['TSflux'].value_in(units.W / units.m**2),
+                                   SHflux=C['SHflux'].value_in(units.kg / units.m**2 / units.s),
+                                   QLflux=C['QLflux'].value_in(units.kg / units.m**2 / units.s),
+                                   QIflux=C['QIflux'].value_in(units.kg / units.m**2 / units.s))
+            
+        # spio.write_netCDF_data(col, **C)
         # print('Storing extra column data', varname, C)
 
 
@@ -209,10 +239,13 @@ def output_column_conversion(profile):
 
     # sum up dZ to get Z at half-levels.
     # 0 is at the end of the list, therefore reverse lists before and after.
-    Zh = numpy.cumsum(dZ[::-1])[::-1]
 
-    Zh = numpy.append(Zh, 0)  # append a 0 for ground
+    #Zh = numpy.cumsum(dZ[::-1])[::-1]
+    #Zh = numpy.append(Zh, 0)  # append a 0 for ground
 
+    Zh = dZ[::-1].cumsum()[::-1]
+    Zh.append(0 | units.m) # append a 0 for ground
+    
     # height of full levels - simply average half levels (for now)
     # better: use full level pressure to calculate height?
     # Zf = (Zh[1:] + Zh[:-1]) * .5
@@ -482,7 +515,13 @@ def variability_nudge(les, gcm):
     qt_av = les.get_profile("QT")
 
     ql = (qt - qsat).maximum(0 | units.mfu).sum(axis=(0,1)) / (les.itot * les.jtot)
-
+    # strangely, this doesn't have a unit
+    # the part before / has the unit mfu
+    # mfu is dimensionless - might be the reason.
+    # use mean instead of sum / size  ?
+    
+    # ql_ref has unit mfu
+    
     # print('---', les.lat, les.lon, '---')
     # print(les.QL)
     # print(les.ql_ref)
@@ -519,8 +558,13 @@ def variability_nudge(les, gcm):
                                     # Nudge towards barely unsaturated.
             i,j = numpy.unravel_index(numpy.argmax(qt[:,:,k] - qsat[:,:,k]), qt[:,:,k].shape)
             beta[k] = (qsat[i,j,k] - qt_av[k]) / (qt[i,j,k] - qt_av[k])
+            # print (qt[i,j,k].value_in(units.mfu))
+            # print (qsat[i,j,k].value_in(units.mfu))
+            # print(qt_av[k].value_in(units.mfu))
+            # print(ql[k].value_in(units.mfu))
+            #print(les.ql_ref[k].value_in(units.mfu))
             log.info('%d nudging towards non-saturation. Max at (%d,%d). qt:%f, qsat:%f, qt_av[k]:%f, beta:%f, ql_avg:%f, ql_ref:%f'%
-                     (k, i, j, qt[i,j,k], qsat[i,j,k], qt_av[k], beta[k], ql[k], les.ql_ref[k]))
+                     (k, i, j, qt[i,j,k].value_in(units.mfu), qsat[i,j,k].value_in(units.mfu), qt_av[k].value_in(units.mfu), beta[k], ql[k], les.ql_ref[k].value_in(units.mfu)))
             if beta[k] < 0:
                 # this happens when qt_av > qsat
                 log.info('  beta<0, setting beta=1 ')

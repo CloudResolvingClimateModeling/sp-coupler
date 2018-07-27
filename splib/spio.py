@@ -252,8 +252,10 @@ def write_netCDF_data(column_index, **kwargs):
             try:
                 ncvar[cdf_step] = arr
             except IndexError:
-                log.error("write_netCDF_data: Variable %s has length %d, should be %d" % (var, len(arr),
-                                                                                          len(ncvar[cdf_step])))
+                log.error("write_netCDF_data: Variable %s has length %d, should be %d" % (var, len(arr), len(ncvar[cdf_step])))
+            except ValueError:
+                log.error("write_netCDF_data: Variable %s has a weird type"%var)
+                log.error(str(var.unit)) # try to write the unit
         else:
             log.error("Attempt to write profile to uninitialized variable %s" % var)
     if lock:
