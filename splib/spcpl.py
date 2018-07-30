@@ -292,6 +292,15 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     qt_d = les.get_profile_QT()
     ql_d = les.get_profile_QL()
     ps_d = les.get_surface_pressure()
+
+    try:
+        rain_last = les.rain
+    except:
+        rain_last = 0 | units.kg / units.m**2
+    rain = les.get_rain()
+    les.rain = rain
+    rainrate = (rain - rain_last) / dt_gcm
+    
     #ft = dt  # forcing time constant
 
     # forcing
@@ -313,7 +322,9 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     spio.write_les_data(les,f_u = f_u.value_in(units.m/units.s**2),
                             f_v = f_v.value_in(units.m/units.s**2),
                             f_thl = f_thl.value_in(units.K/units.s),
-                            f_qt = f_qt.value_in(units.mfu/units.s))
+                            f_qt = f_qt.value_in(units.mfu/units.s),
+                            rain = rain.value_in(units.kg / units.m**2),
+                            rainrate = rainrate.value_in(units.kg / units.m**2 / units.s)*3600)
 
     # set tendencies for Dales
     les.set_tendency_U(f_u)

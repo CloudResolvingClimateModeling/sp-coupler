@@ -188,7 +188,10 @@ def create_netcdf_subgroup(rootgrp, subgroup, lat, lon, with_surf_vars=True):
         p.units = unit
 
     # Surface fields (LES scalars)
-    srf = [('Psurf', 'Pa')]
+    srf = [('Psurf',     'Pa'),
+           ('rain',      'kg / m^2'),
+           ('rainrate',  'kg / m^2h')
+          ]
 
     if with_surf_vars:
         srf += [('z0m', 'm')]
