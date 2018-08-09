@@ -43,13 +43,13 @@ cd src
 hg clone -b meteo https://goord@bitbucket.org/omuse/omuse
 cd omuse
 
-export DOWNLOAD_CODES=0
+export DOWNLOAD_CODES=1
+
 cd community/oifs
 export OIFS_GRIB_API_DIR=$GRIB_API_DIR
 make
 
 cd ../dales
-git clone --depth=1 https://github.com/CloudResolvingClimateModeling/dales.git dales-repo
 make
 
 
