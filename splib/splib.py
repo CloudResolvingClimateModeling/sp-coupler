@@ -27,13 +27,8 @@ import spio
 import spmpi
 import psutil
 
-print("splib.py - importing   from amuse.community import *")
 from amuse.community import *
-
-print("splib.py - importing from amuse.rfi import channel")
 from amuse.rfi import channel  # to query MPI threading support
-
-print("splib.py - importing from amuse.rfi.channel import AsyncRequestsPool")
 from amuse.rfi.channel import AsyncRequestsPool
 
 # Logger
