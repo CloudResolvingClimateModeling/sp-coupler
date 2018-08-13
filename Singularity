@@ -32,7 +32,7 @@ make
 make install
 export GRIB_API_DIR=$PWD
 cd /opt
-git clone -b minimal --depth=1 https://github.com/ipelupessy/amuse.git
+git clone  -b release-11.1 --single-branch --depth=1 https://github.com/amusecode/amuse.git 
 cd amuse
 export PYTHON=python
 export MODULEPATH=/etc/modulefiles
@@ -40,6 +40,7 @@ eval `/usr/bin/modulecmd sh load mpi/openmpi-x86_64`
 ./configure FC=gfortran FCFLAGS="-I/usr/include -I/usr/lib64/gfortran/modules"
 make framework
 cd src
+                # TODO: move to master branch once merged, pin to version when one is released
 hg clone -b meteo https://goord@bitbucket.org/omuse/omuse
 cd omuse
 
