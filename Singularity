@@ -40,8 +40,8 @@ eval `/usr/bin/modulecmd sh load mpi/openmpi-x86_64`
 ./configure FC=gfortran FCFLAGS="-I/usr/include -I/usr/lib64/gfortran/modules"
 make framework
 cd src
-                # TODO: move to master branch once merged, pin to version when one is released
-hg clone -b meteo https://goord@bitbucket.org/omuse/omuse
+
+hg clone -r v1.1 https://bitbucket.org/omuse/omuse
 cd omuse
 
 export DOWNLOAD_CODES=1

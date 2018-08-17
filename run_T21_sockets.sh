@@ -5,24 +5,32 @@
 # This version uses the Amuse sockets channel - which at the moment works on
 # a single node but not over networked nodes.
 
-N_GCM=2
+# number of GCM(OpenIFS) processes
+N_GCM=1
+
+# number of LES instances
 N_LES=2
-LES_PROCS=2
+
+# number of LES processes per instance
+LES_PROCS=1
+
 
 OIFSDIR=oifs-input
 DALESDIR=dales-input
 OUT=output
 
 
-python2 ./spmaster.py --steps 5  \
+python2 ./spmaster.py --steps 100  \
 --poly        20 -50  10 -50   10 -40   20 -40	\
 --gcmprocs $N_GCM --numles $N_LES --lesprocs $LES_PROCS  \
---channel=sockets \
 --gcmdir=$OIFSDIR --gcmexp=TEST \
---lesdir=$DALESDIR --odir=$OUT --cplsurf
+--lesdir=$DALESDIR --odir=$OUT --cplsurf \
+--channel=sockets 
+
+# optional LES spinup: total spin-up time(s), number of steps, strength of the forcing towards the GCM profile
+# --spinup 14400 --spinup_steps 16 --spinup_forcing 0.25
 
 
-# --spinup 14400 --spinup_steps 16
 
 
 
