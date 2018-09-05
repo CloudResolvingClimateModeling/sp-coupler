@@ -254,13 +254,21 @@ def run_spinup(les_list, gcm, spinup_length, spinup_steps=1):
 
 timing_file = None
 
+def open_timing_file():
+    global timing_file
+    timing_file = open(output_dir + '/timing.txt', 'a')
+    s = '# LES grid points\n'
+    s += ' '.join([str(les.grid_index) for les in les_models])
+    s += '\n# timing data\n'
+    timing_file.write(s)
+
 
 # do one gcm time step
 # step les until it catches up
 def step(work_queue=None):
     global timing_file
     if not timing_file:
-        timing_file = open(output_dir + '/timing.txt', 'a')
+       open_timing_file()
 
     starttime = time.time()
     gcm_walltime1 = -time.time()
@@ -332,7 +340,7 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
     if not any(les_list): return
 
     if not timing_file:
-        timing_file = open(output_dir + '/timing.txt', 'a')
+        open_timing_file()
 
     starttime = time.time()
     
