@@ -451,11 +451,17 @@ def les_init(lestype, inputdir, workdir, starttime, index):
         typekey = modfac.dummy_les_type
     if lestype == modfac.ncbased_type:
         typekey = modfac.ncfile_les_type
+
+    if not restart:
+        pass
+        # add spinup time to trestart
+    trestart = 10000000 | units.s # large value -> no restart file written
     model = modfac.create_model(typekey, inputdir, workdir,
                                 nprocs=les_num_procs,
                                 redirect=les_redirect,
                                 channel_type=channel_type,
                                 restart=restart,
+                                trestart=trestart,
                                 starttime=starttime,
                                 index=index,
                                 qt_forcing=qt_forcing)

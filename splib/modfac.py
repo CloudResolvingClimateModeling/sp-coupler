@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 # Factory method for model creation
 # TODO: use kwargs...   
 def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", channel_type="mpi", restart=False,
-                 starttime=None, index=-1, qt_forcing="sp"):
+                 starttime=None, index=-1, qt_forcing="sp", trestart=10000000 | units.s):
     ofile = os.path.join(workdir, model_type + ".out")
     efile = os.path.join(workdir, model_type + ".err")
     if model_type == oifs_type:
@@ -79,7 +79,7 @@ def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", chann
                       channel_type=channel_type,
                       workdir=workdir)  # , debugger='gdb')
         dales.parameters.restart_flag = restart
-        dales.parameters.trestart = 43200 | units.s  # TODO: make this adjustable
+        dales.parameters.trestart = trestart
         if starttime is not None:
             dales.parameters.starttime = starttime
         dales.parameters.qt_forcing = qt_forcings[qt_forcing]
