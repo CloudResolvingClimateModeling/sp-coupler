@@ -455,7 +455,7 @@ def les_init(lestype, inputdir, workdir, starttime, index):
     if not restart:
         pass
         # add spinup time to trestart
-    trestart = 10000000 | units.s # large value -> no restart file written
+    trestart = 1000000 | units.s # large value -> no restart file written
     model = modfac.create_model(typekey, inputdir, workdir,
                                 nprocs=les_num_procs,
                                 redirect=les_redirect,
