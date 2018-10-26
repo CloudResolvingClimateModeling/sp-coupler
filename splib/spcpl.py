@@ -98,7 +98,7 @@ def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None)
                                   QI = C['QI'].value_in(units.mfu), #A.value_in(units.ccu)
                                   Pf = C['Pf'].value_in(units.Pa),
                                   Ph = C['Ph'].value_in(units.Pa),
-                                  # Zf = C['Zf'].value_in(units.m),
+                                  Zf = C['Zf'].value_in(units.m),
                                   Zh = C['Zh'].value_in(units.m),
                                   Psurf = C['Psurf'].value_in(units.Pa),
                                   Tv = C['Tv'].value_in(units.K),
@@ -248,8 +248,9 @@ def output_column_conversion(profile):
     
     # height of full levels - simply average half levels (for now)
     # better: use full level pressure to calculate height?
-    # Zf = (Zh[1:] + Zh[:-1]) * .5
+    Zf = (Zh[1:] + Zh[:-1]) * .5
     profile['Zh'] = Zh[1:]
+    profile['Zf'] = Zf[:]
     profile['Psurf'] = profile['Ph'][-1]
     profile['Ph'] = profile['Ph'][1:]
     profile['THL'] = (profile['T'] - (sputils.rlv * (profile['QL'] + profile['QI'])) / sputils.cp) * sputils.iexner(profile['Pf'])
