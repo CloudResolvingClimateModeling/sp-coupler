@@ -18,7 +18,8 @@ import json
 from splib import splib, modfac
 
 
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 # change INFO to DEBUG for debug messages from AMUSE
 
 # Logger

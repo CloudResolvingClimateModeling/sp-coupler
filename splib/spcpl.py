@@ -277,10 +277,164 @@ def set_les_state(les, u, v, thl, qt, ps=None):
     les.set_field('V',   vabsmax*numpy.random.uniform(-1., 1., (les.itot, les.jtot, les.k)) + v)
     les.set_field('THL', thlabsmax*numpy.random.uniform(-1., 1., (les.itot, les.jtot, les.k)) + thl)
     les.set_field('QT',  qabsmax*numpy.random.uniform(-1., 1., (les.itot, les.jtot, les.k)) + qt)
-
+    les.u_d = u
+    les.v_d = v
+    les.thl_d = thl
+    les.qt_d = qt
+    
     if ps:
         les.set_surface_pressure(ps)
+    les.ps_d = ps
+        
+# quick test of asynchronous les running
+# set forcings, step, get state    
+def very_async_les(pool, les, target_time):
+     # set tendencies
+     pool.add_request(les.set_tendency_U.async(les.f_u))
+     pool.add_request(les.set_tendency_V.async(les.f_v))
+     pool.add_request(les.set_tendency_THL.async(les.f_thl))
+     pool.add_request(les.set_tendency_QT.async(les.f_qt))
+     pool.add_request(les.set_tendency_surface_pressure.async(les.f_ps))
+     pool.add_request(les.set_tendency_QL.async(les.f_ql))                # used in experimental local qt nudging
+     pool.add_request(les.set_ref_profile_QL.async(les.ql)) 
 
+     # time step
+     pool.add_request(les.evolve_model.async(target_time, exactEnd=True))
+
+     # get state
+     les.u_req = les.get_profile_U.async()
+     les.v_req = les.get_profile_V.async()
+     les.thl_req = les.get_profile_THL.async()
+     les.qt_req = les.get_profile_QT.async()
+     les.ql_req = les.get_profile_QL.async()
+     les.ps_req = les.get_surface_pressure.async()
+
+     pool.add_request(les.u_req)
+     pool.add_request(les.v_req)
+     pool.add_request(les.thl_req)
+     pool.add_request(les.qt_req)
+     pool.add_request(les.ql_req)
+     pool.add_request(les.ps_req)
+
+def fetch_les_results(les):
+    "Extract profiles from finished async request results"
+    les.u_d = les.u_req.result()
+    les.v_d = les.v_req.result()
+    les.thl_d = les.thl_req.result()
+    les.qt_d = les.qt_req.result()
+    les.ql_d = les.ql_req.result()
+    les.ps_d = les.ps_req.result()
+
+
+# Computes the forcings to the les model before time stepping
+
+def prepare_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
+    u, v, thl, qt, ps, ql = convert_profiles(les)
+
+    # get dales slab averages
+#    u_d = les.get_profile_U()
+#    v_d = les.get_profile_V()
+#    thl_d = les.get_profile_THL()
+#    qt_d = les.get_profile_QT()
+ #   ql_d = les.get_profile_QL()
+ #   ps_d = les.get_surface_pressure()
+
+
+  # TODO put back rain
+    #try:
+    #    rain_last = les.rain
+   # except:
+   #     rain_last = 0 | units.kg / units.m**2
+   # rain = les.get_rain()
+   # les.rain = rain
+   # rainrate = (rain - rain_last) / dt_gcm
+    
+    #ft = dt  # forcing time constant
+
+    # forcing
+    les.f_u = factor * (u - les.u_d) / dt_gcm
+    les.f_v = factor * (v - les.v_d) / dt_gcm
+    les.f_thl = factor * (thl - les.thl_d) / dt_gcm
+    les.f_qt = factor * (qt - les.qt_d) / dt_gcm
+    les.f_ps = factor * (ps - les.ps_d) / dt_gcm
+    # les.f_ql = factor * (ql - les.ql_d) / dt_gcm
+
+    # log.info("RMS forcings at %d during time step" % les.grid_index)
+    # dt_gcm = gcm.get_timestep().value_in(units.s)
+    # log.info("  u  : %f" % (sputils.rms(f_u)*dt_gcm))
+    # log.info("  v  : %f" % (sputils.rms(f_v)*dt_gcm))
+    # log.info("  thl: %f" % (sputils.rms(f_thl)*dt_gcm))
+    # log.info("  qt : %f" % (sputils.rms(f_qt)*dt_gcm))
+
+    # store forcings on dales in the statistics
+    spio.write_les_data(les,f_u = les.f_u.value_in(units.m/units.s**2),
+                            f_v = les.f_v.value_in(units.m/units.s**2),
+                            f_thl = les.f_thl.value_in(units.K/units.s),
+                            f_qt = les.f_qt.value_in(units.mfu/units.s),
+    )
+                            #rain = rain.value_in(units.kg / units.m**2),
+                            #rainrate = rainrate.value_in(units.kg / units.m**2 / units.s)*3600)
+                            # TODO put back rain
+
+                            
+    # set tendencies for Dales
+    #les.set_tendency_U(f_u)
+    #les.set_tendency_V(f_v)
+    #les.set_tendency_THL(f_thl)
+    #les.set_tendency_QT(f_qt)
+    #les.set_tendency_surface_pressure(f_ps)
+    #les.set_tendency_QL(f_ql)                # used in experimental local qt nudging
+    #les.set_ref_profile_QL(ql)               # used in experimental variability nudging
+
+    #les.ql_ref = ql                          # store ql profile from GCM, interpolated to the LES levels
+                                             # for another variant of variability nudging 
+        
+    # transfer surface quantities
+    if couple_surface:
+        z0m, z0h, wt, wq = convert_surface_fluxes(les)
+        les.set_z0m_surf(z0m)
+        les.set_z0h_surf(z0h)
+        les.set_wt_surf(wt)
+        les.set_wq_surf(wq)
+        spio.write_les_data(les,
+                            z0m=z0m.value_in(units.m),
+                            z0h=z0h.value_in(units.m),
+                            wthl=wt.value_in(units.m * units.s**-1 * units.K),
+                            wqt=wq.value_in(units.m / units.s))
+
+        spio.write_les_data(les,
+                            TLflux=les.TLflux.value_in(units.W / units.m**2),
+                            TSflux=les.TSflux.value_in(units.W / units.m**2),
+                            SHflux=les.SHflux.value_in(units.kg / units.m**2 / units.s),
+                            QLflux=les.QLflux.value_in(units.kg / units.m**2 / units.s),
+                            QIflux=les.QIflux.value_in(units.kg / units.m**2 / units.s))
+
+    if qt_forcing == 'variance':
+        if les.get_model_time() > 0 | units.s:
+            starttime = time.time()
+            variability_nudge(les, gcm)
+            walltime = time.time() - starttime
+            log.info("variability nudge took %6.2f s"%walltime)
+
+
+
+
+            
+#####################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
 # Computes and applies the forcings to the les model before time stepping,
 # relaxing it toward the gcm mean state.
 def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
@@ -374,12 +528,22 @@ def set_gcm_tendencies(gcm,les,factor = 1):
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
     h = les.zf
-    u_d = les.get_profile_U()
-    v_d = les.get_profile_V()
-    sp_d = les.get_presf()
-    thl_d = les.get_profile_THL()
-    qt_d = les.get_profile_QT()
-    ql_d = les.get_profile_QL()
+    # u_d = les.get_profile_U()
+    # v_d = les.get_profile_V()
+    # sp_d = les.get_presf()
+    # thl_d = les.get_profile_THL()
+    # qt_d = les.get_profile_QT()
+    # ql_d = les.get_profile_QL()
+
+    # get the already fetched states from the LES object
+    u_d = les.u_d
+    v_d = les.v_d
+    sp_d = les.sp_d
+    thl_d = les.thl_d
+    qt_d = les.qt_d
+    ql_d = les.ql_d
+    
+    
     ql_ice_d = les.get_profile_QL_ice()  # ql_ice is the ice part of QL
     ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
     qr_d = les.get_profile_QR()

@@ -224,7 +224,8 @@ def run(nsteps):
         work_queue, worker_threads = start_worker_threads(les_queue_threads)
     # timestep models together
     for s in range(nsteps):
-        step(work_queue)
+        # step(work_queue)
+        step_async()
         log.info('python master usage: %s' % str(current_process.memory_full_info()))
         log.info('System total: %s' % str(psutil.virtual_memory()))
         log.info('  ---- Time step done ---')
@@ -262,7 +263,65 @@ def open_timing_file():
     s += '\n# timing data\n'
     timing_file.write(s)
 
+# experimental, less synchronous stepper
+def step_async():
+    log.info("step_async starting")
+    pool = AsyncRequestsPool()
+    
+    try:
+        if gcm_model.first_half_step_done:
+            # if we already did the first half step as part of the initialization,
+            # don't repeat it now.
+            gcm_model.first_half_step_done = False
+        else:
+            log.info("gcm.evolve_model_until_cloud_scheme()")
+            gcm_model.evolve_model_until_cloud_scheme()
+            log.info("gcm.evolve_model_cloud_scheme()")
+            gcm_model.evolve_model_cloud_scheme()  # note: overwrites set tendencies
+    except Exception as e:
+        log.error("Exception when time-stepping openIFS: %s Exiting." % e.message)
+        log.error(sys.exc_info())
+        finalize()
+        sys.exit(1)
+        
+    gcm_model.step += 1
 
+    t = gcm_model.get_model_time()
+    log.info("gcm evolved to %s" % str(t))
+
+    spcpl.gather_gcm_data(gcm_model, les_models, cplsurf, output_column_indices)
+    
+    delta_t = gcm_model.get_timestep()
+
+    log.info("adding async les tasks to pool")
+    for les in les_models:
+        spcpl.prepare_les_forcings(les, gcm_model, dt_gcm=delta_t, factor=les_forcing_factor,
+                                   couple_surface=cplsurf, qt_forcing=qt_forcing)
+        spcpl.very_async_les(pool, les, t + delta_t + (les_spinup | units.s))
+
+    log.info("wait for pool")
+    pool.wait()
+
+    log.info("fetching results from async tasks")
+    for les in les_models:
+        fetch_les_results(les)
+    
+        
+    # get les state - for forcing on OpenIFS and les stats
+    for les in les_models:
+        spcpl.set_gcm_tendencies(gcm_model, les, factor=gcm_forcing_factor)
+        
+
+    gcm_model.evolve_model_from_cloud_scheme()
+
+    spio.update_time(gcm_model.get_model_time() + (les_spinup | units.s))
+
+    # sync spifs.nc now, if we have no LES models.
+    # if we do have LES models, we sync elsewhere, while the LES models are busy.
+    if len(les_models) == 0:
+        spio.sync_root()
+    log.info("step_async done!")
+    
 # do one gcm time step
 # step les until it catches up
 def step(work_queue=None):
@@ -465,7 +524,7 @@ def les_init(lestype, inputdir, workdir, starttime, index):
                                 starttime=starttime,
                                 index=index,
                                 qt_forcing=qt_forcing)
-    model.initialize_code()
+    # model.initialize_code()
     model.commit_parameters()
     model.commit_grid()
     return model
