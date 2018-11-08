@@ -286,31 +286,34 @@ def set_les_state(les, u, v, thl, qt, ps=None):
 def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     u, v, thl, qt, ps, ql = convert_profiles(les)
 
-    # get dales slab averages
-    u_d = les.get_profile_U()
-    v_d = les.get_profile_V()
-    thl_d = les.get_profile_THL()
-    qt_d = les.get_profile_QT()
-    ql_d = les.get_profile_QL()
-    ps_d = les.get_surface_pressure()
-
+    # save previous rain value
     try:
         rain_last = les.rain
     except:
         rain_last = 0 | units.kg / units.m**2
-    rain = les.get_rain()
-    les.rain = rain
-    rainrate = (rain - rain_last) / dt_gcm
+        
+    # get dales slab averages if we don't have them alreay
+    if getattr(les, 'has_profiles', False) == False:        
+        les.u_d = les.get_profile_U()
+        les.v_d = les.get_profile_V()
+        les.thl_d = les.get_profile_THL()
+        les.qt_d = les.get_profile_QT()
+        les.ql_d = les.get_profile_QL()
+        les.ps_d = les.get_surface_pressure()
+        les.rain = les.get_rain()
+        les.has_profiles = True
+
+    rainrate = (les.rain - rain_last) / dt_gcm
     
     #ft = dt  # forcing time constant
 
     # forcing
-    f_u = factor * (u - u_d) / dt_gcm
-    f_v = factor * (v - v_d) / dt_gcm
-    f_thl = factor * (thl - thl_d) / dt_gcm
-    f_qt = factor * (qt - qt_d) / dt_gcm
-    f_ps = factor * (ps - ps_d) / dt_gcm
-    f_ql = factor * (ql - ql_d) / dt_gcm
+    f_u = factor * (u - les.u_d) / dt_gcm
+    f_v = factor * (v - les.v_d) / dt_gcm
+    f_thl = factor * (thl - les.thl_d) / dt_gcm
+    f_qt = factor * (qt - les.qt_d) / dt_gcm
+    f_ps = factor * (ps - les.ps_d) / dt_gcm
+    f_ql = factor * (ql - les.ql_d) / dt_gcm
 
     # log.info("RMS forcings at %d during time step" % les.grid_index)
     # dt_gcm = gcm.get_timestep().value_in(units.s)
@@ -324,7 +327,7 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
                             f_v = f_v.value_in(units.m/units.s**2),
                             f_thl = f_thl.value_in(units.K/units.s),
                             f_qt = f_qt.value_in(units.mfu/units.s),
-                            rain = rain.value_in(units.kg / units.m**2),
+                            rain = les.rain.value_in(units.kg / units.m**2),
                             rainrate = rainrate.value_in(units.kg / units.m**2 / units.s)*3600)
 
     # set tendencies for Dales
@@ -374,49 +377,51 @@ def set_gcm_tendencies(gcm,les,factor = 1):
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
     h = les.zf
-    u_d = les.get_profile_U()
-    v_d = les.get_profile_V()
-    sp_d = les.get_presf()
-    thl_d = les.get_profile_THL()
-    qt_d = les.get_profile_QT()
-    ql_d = les.get_profile_QL()
-    ql_ice_d = les.get_profile_QL_ice()  # ql_ice is the ice part of QL
-    ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
-    qr_d = les.get_profile_QR()
-    A_d = get_cloud_fraction(les)
+    les.u_d = les.get_profile_U()
+    les.v_d = les.get_profile_V()
+    les.sp_d = les.get_presf()
+    les.thl_d = les.get_profile_THL()
+    les.qt_d = les.get_profile_QT()
+    les.ql_d = les.get_profile_QL()
+    les.ql_ice_d = les.get_profile_QL_ice()  # ql_ice is the ice part of QL
+    les.ql_water_d = les.ql_d - les.ql_ice_d  # ql_water is the water part of ql
+    les.qr_d = les.get_profile_QR()
+    les.A_d = get_cloud_fraction(les)
+    les.has_profiles = True
+    
     # dales state
     # dales.cdf.variables['presh'][gcm.step] = dales.get_presh().value_in(units.Pa) # todo associate with zh in netcdf
 
     # calculate real temperature from Dales' thl, qt, using the pressures from openIFS
     pf   = sputils.interp(h,Zf[::-1],Pf[::-1])
-    t    = thl_d * sputils.exner(pf) + sputils.rlv * ql_d / sputils.cp
+    t    = les.thl_d * sputils.exner(pf) + sputils.rlv * les.ql_d / sputils.cp
 
     # get real temperature from Dales - note it is calculated internally from thl and ql
-    t_d = les.get_profile_T()
+    les.t_d = les.get_profile_T()
 
-    spio.write_les_data(les,u = u_d.value_in(units.m/units.s),
-                            v = v_d.value_in(units.m/units.s),
-                            presf = sp_d.value_in(units.Pa),
-                            qt = qt_d.value_in(units.mfu),
-                            ql = ql_d.value_in(units.mfu),
-                            ql_ice = ql_ice_d.value_in(units.mfu),
-                            ql_water = ql_water_d.value_in(units.mfu),
-                            thl = thl_d.value_in(units.K),
+    spio.write_les_data(les,u = les.u_d.value_in(units.m/units.s),
+                            v = les.v_d.value_in(units.m/units.s),
+                            presf = les.sp_d.value_in(units.Pa),
+                            qt = les.qt_d.value_in(units.mfu),
+                            ql = les.ql_d.value_in(units.mfu),
+                            ql_ice = les.ql_ice_d.value_in(units.mfu),
+                            ql_water = les.ql_water_d.value_in(units.mfu),
+                            thl = les.thl_d.value_in(units.K),
                             t = t.value_in(units.K),
-                            t_ = t_d.value_in(units.K),
-                            qr = qr_d.value_in(units.mfu))
+                            t_ = les.t_d.value_in(units.K),
+                            qr = les.qr_d.value_in(units.mfu))
 
     # forcing
     ft = gcm.get_timestep() # should be the length of the NEXT time step
 
     # interpolate to GCM heights
-    t_d = sputils.interp(Zf,h,t_d)
-    qt_d = sputils.interp(Zf,h,qt_d)
-    ql_d = sputils.interp(Zf,h,ql_d)
-    ql_water_d = sputils.interp(Zf,h,ql_water_d)
-    ql_ice_d = sputils.interp(Zf,h,ql_ice_d)
-    u_d = sputils.interp(Zf,h,u_d)
-    v_d = sputils.interp(Zf,h,v_d)
+    t_d = sputils.interp(Zf,h,les.t_d)
+    qt_d = sputils.interp(Zf,h,les.qt_d)
+    ql_d = sputils.interp(Zf,h,les.ql_d)
+    ql_water_d = sputils.interp(Zf,h,les.ql_water_d)
+    ql_ice_d = sputils.interp(Zf,h,les.ql_ice_d)
+    u_d = sputils.interp(Zf,h,les.u_d)
+    v_d = sputils.interp(Zf,h,les.v_d)
     
     
     # log.info("Height of LES system: %f" % h[-1])
@@ -433,7 +438,7 @@ def set_gcm_tendencies(gcm,les,factor = 1):
 #   dales QL is both liquid and ice - f_QL is liquid only. this conserves water mass but makes an error in latent heat.
     f_U  = factor * (u_d  - U)  / ft
     f_V  = factor * (v_d  - V)  / ft
-    f_A  = factor * (A_d  - A)  / ft
+    f_A  = factor * (les.A_d  - A)  / ft
 
     f_T[0:start_index]  *= 0   # zero out the forcings above the Dales system
     f_SH[0:start_index] *= 0   # TODO : taper off smoothly instead

@@ -465,7 +465,7 @@ def les_init(lestype, inputdir, workdir, starttime, index):
                                 starttime=starttime,
                                 index=index,
                                 qt_forcing=qt_forcing)
-    model.initialize_code()
+#    model.initialize_code()
     model.commit_parameters()
     model.commit_grid()
     return model
