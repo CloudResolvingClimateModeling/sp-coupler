@@ -294,6 +294,7 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
         
     # get dales slab averages if we don't have them alreay
     if getattr(les, 'has_profiles', False) == False:        
+        log.debug("set_les_forcings fetching LES profiles")
         les.u_d = les.get_profile_U()
         les.v_d = les.get_profile_V()
         les.thl_d = les.get_profile_THL()
@@ -302,7 +303,9 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
         les.ps_d = les.get_surface_pressure()
         les.rain = les.get_rain()
         les.has_profiles = True
-
+    else:
+        log.debug("set_les_forcings using cached LES profiles")
+        
     rainrate = (les.rain - rain_last) / dt_gcm
     
     #ft = dt  # forcing time constant

@@ -310,6 +310,7 @@ def step(work_queue=None):
     # step les models to the end time of the current GCM step = t + delta_t
     les_wall_times = step_les_models(t + delta_t, work_queue, offset=les_spinup)
 
+ 
     set_gcm_tendencies_walltime = -time.time()
     # get les state - for forcing on OpenIFS and les stats
     for les in les_models:
@@ -560,6 +561,11 @@ def step_les_models(model_time, work_queue, offset=les_spinup):
     else:  # sequential version
         for les in les_models:
             step_les(les, model_time, offset)
+
+    # mark cached profiles as out-of-date
+    for les in les_models:
+        les.has_profiles = False
+
     return les_wall_times
 
 
