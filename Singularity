@@ -44,13 +44,15 @@ cd src
 hg clone -r v1.1 https://bitbucket.org/omuse/omuse
 cd omuse
 
-export DOWNLOAD_CODES=1
 
 cd community/oifs
 export OIFS_GRIB_API_DIR=$GRIB_API_DIR
+export DOWNLOAD_CODES=0
+git clone https://git.ecmwf.int/scm/~g.vandenoord_esciencecenter.nl/oifs40r1-lib.git oifs-repo
 make
 
 cd ../dales
+export DOWNLOAD_CODES=1
 make
 
 
