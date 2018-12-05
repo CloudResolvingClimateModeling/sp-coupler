@@ -1,4 +1,6 @@
 # Superparameterization of OpenIFS with DALES
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1968305.svg)](https://doi.org/10.5281/zenodo.1968305)
+
 
 This repository contains a script for running the global atmospheric model [OpenIFS](https://confluence.ecmwf.int/display/OIFS/OpenIFS+Home)
 coupled to local cloud-resolving LES simulations. The LES used is [DALES](https://github.com/dalesteam/dales),
