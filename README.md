@@ -134,9 +134,14 @@ Next, install the following programs, in this order:
 Note that OpenIFS might require several environment variables to be set both at compilation and at runtime.
 See [the OpenIFS manual](https://confluence.ecmwf.int/display/OIFS/OpenIFS+User+Guides).
 
-Once the above are installed, the model coupling scripts in this repository can run.
-* sp-coupler (this repository)  
-
+Once the above are installed, you will need to add the python modules to your PYTHONPATH:
+```
+export PYTHONPATH=<AMUSE clone path>/src:<SP-coupler clone path>/splib
+```
+to run the main driver script in this repo, spmaster.py. To view all the superparametrization options and configurations (e.g. the choice of the superparametrized region), type
+```
+./spmaster.py --help
+```
 
 ## License
 
