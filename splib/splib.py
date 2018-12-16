@@ -376,7 +376,12 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
 # is generated in one of the worker threads.
 # The goal then is to 1) make all threads quit, so that the job ends instead of hanging
 #                     2) make all worker_threads quit as nicely as possible so that results are saved
-def finalize():
+def finalize(save_restart=True):
+    if save_restart:
+        for les in les_models:
+            pass
+            # TODO - call dales save restart file function
+            
     log.info("spifs cleanup...")
     log.info("Stopping gcm...")
     try:
@@ -452,10 +457,14 @@ def les_init(lestype, inputdir, workdir, starttime, index):
     if lestype == modfac.ncbased_type:
         typekey = modfac.ncfile_les_type
 
+    #trestart = 1000000 | units.s # large value -> no restart file written
+
+    # schedule restart files to be written at the end of the run
+    trestart = gcm_num_steps * (900 | units.s) # TODO: gcm dt currently hardcoded
     if not restart:
-        pass
+        trestart += les_spinup | units.s             
         # add spinup time to trestart
-    trestart = 1000000 | units.s # large value -> no restart file written
+    
     model = modfac.create_model(typekey, inputdir, workdir,
                                 nprocs=les_num_procs,
                                 redirect=les_redirect,
