@@ -289,17 +289,28 @@ def set_les_state(les, u, v, thl, qt, ps=None):
 # quick test of asynchronous les running
 # set forcings, step, get state    
 def very_async_les(pool, les, target_time):
+    # new way:
+#    les.set_tendency_U.async(les.f_u)
+#    les.set_tendency_V.async(les.f_v)
+#    ...
+#    pool.add_request(les.async_request)  # add last request to the pool
+#
+#    prettier syntax:
+#    les.set_tendency_U(les.f_u, async=True) # currently - not compatible with python 3.6               
+#    les.set_tendency_U(les.f_u, return_request=True)
+    
+
      # set tendencies
-     pool.add_request(les.set_tendency_U.async(les.f_u))
-     pool.add_request(les.set_tendency_V.async(les.f_v))
-     pool.add_request(les.set_tendency_THL.async(les.f_thl))
-     pool.add_request(les.set_tendency_QT.async(les.f_qt))
-     pool.add_request(les.set_tendency_surface_pressure.async(les.f_ps))
-     pool.add_request(les.set_tendency_QL.async(les.f_ql))                # used in experimental local qt nudging
-     pool.add_request(les.set_ref_profile_QL.async(les.ql)) 
+     les.set_tendency_U.async(les.f_u)
+     les.set_tendency_V.async(les.f_v)
+     les.set_tendency_THL.async(les.f_thl)
+     les.set_tendency_QT.async(les.f_qt)
+     les.set_tendency_surface_pressure.async(les.f_ps)
+     les.set_tendency_QL.async(les.f_ql)                # used in experimental local qt nudging
+     les.set_ref_profile_QL.async(les.ql) 
 
      # time step
-     pool.add_request(les.evolve_model.async(target_time, exactEnd=True))
+     les.evolve_model.async(target_time, exactEnd=True)
 
      # get state
      les.u_req = les.get_profile_U.async()
@@ -309,16 +320,11 @@ def very_async_les(pool, les, target_time):
      les.ql_req = les.get_profile_QL.async()
      les.ps_req = les.get_surface_pressure.async()
 
-     pool.add_request(les.u_req)
-     pool.add_request(les.v_req)
-     pool.add_request(les.thl_req)
-     pool.add_request(les.qt_req)
-     pool.add_request(les.ql_req)
-     pool.add_request(les.ps_req)
+     pool.add_request(les.async_request) # add last request to the pool
 
 def fetch_les_results(les):
     "Extract profiles from finished async request results"
-    les.u_d = les.u_req.result()
+    les.u_d = les.get_profile_U.last.result()
     les.v_d = les.v_req.result()
     les.thl_d = les.thl_req.result()
     les.qt_d = les.qt_req.result()
