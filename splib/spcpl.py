@@ -467,13 +467,13 @@ def set_gcm_tendencies_from_file(gcm, les):
 
     print('set_gcm_tendencies_from_file()', t, ti, spio.cdf_root.variables['Time'][ti])
     
-    gcm.set_profile_tendency("U",  les.grid_index, les.cdf.variables['f_U' ][ti])
-    gcm.set_profile_tendency("V",  les.grid_index, les.cdf.variables['f_V' ][ti])
-    gcm.set_profile_tendency("T",  les.grid_index, les.cdf.variables['f_T' ][ti])
-    gcm.set_profile_tendency("SH", les.grid_index, les.cdf.variables['f_SH'][ti])
-    gcm.set_profile_tendency("QL", les.grid_index, les.cdf.variables['f_QL'][ti])
-    gcm.set_profile_tendency("QI", les.grid_index, les.cdf.variables['f_QI'][ti])
-    gcm.set_profile_tendency("A",  les.grid_index, les.cdf.variables['f_A' ][ti])
+    gcm.set_profile_tendency("U",  les.grid_index, les.cdf.variables['f_U' ][ti] | units.m/units.s**2 )
+    gcm.set_profile_tendency("V",  les.grid_index, les.cdf.variables['f_V' ][ti] | units.m/units.s**2 )
+    gcm.set_profile_tendency("T",  les.grid_index, les.cdf.variables['f_T' ][ti] | units.K/units.s)
+    gcm.set_profile_tendency("SH", les.grid_index, les.cdf.variables['f_SH'][ti] | units.shu/units.s)
+    gcm.set_profile_tendency("QL", les.grid_index, les.cdf.variables['f_QL'][ti] | units.shu/units.s)
+    gcm.set_profile_tendency("QI", les.grid_index, les.cdf.variables['f_QI'][ti] | units.shu/units.s)
+    gcm.set_profile_tendency("A",  les.grid_index, les.cdf.variables['f_A' ][ti] | units.s**-1)
 
 
 # fetch LES profiles and write to spifs.nc - used during spinup

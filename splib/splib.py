@@ -95,7 +95,7 @@ def initialize(config, geometries, output_geometries=None):
 
     read_config(config)
 
-    if os.path.exists(output_dir):
+    if not restart and os.path.exists(output_dir):
       raise Exception("output dir %s exists"%output_dir) 
 
 
