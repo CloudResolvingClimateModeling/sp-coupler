@@ -378,10 +378,14 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
 #                     2) make all worker_threads quit as nicely as possible so that results are saved
 def finalize(save_restart=True):
     if save_restart:
+        log.info("Asking Dales to save restart files.")
+        # save LES restart files
         for les in les_models:
-            pass
-            # TODO - call dales save restart file function
-            
+            les.write_restart()
+        log.info("calling gcm.evolve_model_until_cloud_scheme() once more to write restart files")
+        gcm_model.evolve_model_until_cloud_scheme()
+
+
     log.info("spifs cleanup...")
     log.info("Stopping gcm...")
     try:
