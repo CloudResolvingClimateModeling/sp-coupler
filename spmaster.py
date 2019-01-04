@@ -74,7 +74,7 @@ def main():
     parser.add_argument("--steps", dest="gcm_steps",
                         metavar="N",
                         type=int,
-                        default=splib.gcm_num_steps,
+                        default=splib.gcm_steps,
                         help="Nr. of (GCM) time steps")
 
     parser.add_argument("--conf", dest="conf",

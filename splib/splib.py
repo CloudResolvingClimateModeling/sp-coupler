@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 
 # Module configuration variables
 gcm_type = "oifs"
-gcm_num_steps = 10  # number of gcm time steps to perform
+gcm_steps = 10  # number of gcm time steps to perform
 gcm_exp_name = "TEST"  # openifs experiment name
 gcm_input_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../oifs-input")  # openifs input directory
 gcm_run_dir = "oifs-work"  # openifs run directory
@@ -205,9 +205,18 @@ def initialize(config, geometries, output_geometries=None):
         # the data to calculate those forcings may not be available now - they should be saved in the final step of the last run
         # they are saved in spifs.nc
 
+        # only need ps - hope this doesn't have side effects
+        spcpl.gather_gcm_data(gcm_model, les_models, True)
+                       
         for les in les_models:
+            # TODO - test if this is needed
             spcpl.set_gcm_tendencies_from_file(gcm_model, les)
-        
+
+            # here we actually want only ps
+            u, v, thl, qt, ps, ql = spcpl.convert_profiles(les)
+            les.set_surface_pressure(ps)
+            
+
 
 
         
@@ -446,7 +455,7 @@ def gcm_init(gcmtype, inputdir, workdir, couple_surface):
                                 restart=restart)
     model.initialize_code()
     model.exp_name = gcm_exp_name
-    model.num_steps = gcm_num_steps
+    model.num_steps = gcm_steps
     model.step = 0
     model.commit_parameters()
     model.commit_grid()
@@ -468,10 +477,12 @@ def les_init(lestype, inputdir, workdir, starttime, index):
     #trestart = 1000000 | units.s # large value -> no restart file written
 
     # schedule restart files to be written at the end of the run
-    trestart = gcm_num_steps * (900 | units.s) # TODO: gcm dt currently hardcoded
-    if not restart:
-        trestart += les_spinup | units.s             
-        # add spinup time to trestart
+    #trestart = gcm_steps * (900 | units.s) # TODO: gcm dt currently hardcoded
+    # if not restart:
+    #    trestart += les_spinup | units.s             
+    #    # add spinup time to trestart
+
+    trestart = 0 | units.s # don't write periodic restarts
     
     model = modfac.create_model(typekey, inputdir, workdir,
                                 nprocs=les_num_procs,
