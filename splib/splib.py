@@ -257,10 +257,12 @@ timing_file = None
 def open_timing_file():
     global timing_file
     timing_file = open(output_dir + '/timing.txt', 'a')
-    s = '# LES grid points\n'
-    s += ' '.join([str(les.grid_index) for les in les_models])
-    s += '\n# timing data\n'
-    timing_file.write(s)
+    # at a fresh start, write a list of the LES grid points to the file
+    if not restart:
+        s = '# LES grid points\n'
+        s += ' '.join([str(les.grid_index) for les in les_models])
+        s += '\n# timing data\n'
+        timing_file.write(s)
 
 
 # do one gcm time step
@@ -389,6 +391,8 @@ def finalize(save_restart=True):
     log.info("spifs cleanup...")
     log.info("Stopping gcm...")
     try:
+        # pass
+        # removing the cleanup, trying to prevent the model from hanging at the end - didn't help
         gcm_model.cleanup_code()
         gcm_model.stop()
     except Exception as e:
