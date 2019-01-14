@@ -64,6 +64,7 @@ dryrun = False  # if true, only start the GCM to examine the grid.
 async_evolve = True  # time step LES instances using asynchronous amuse calls instead of Python threads (experimental)
 restart = False  # restart an old run
 cplsurf = False  # couple surface fields
+firststep = True # flag for this being the first step - experimentally used in restarts to not log the weird first step
 
 qt_forcing = "sp"
 
@@ -183,7 +184,8 @@ def initialize(config, geometries, output_geometries=None):
         gcm_model.first_half_step_done = True  # set flag here, to avoid repeating the half step
 
         # spio.update_time(gcm_model.get_model_time())
-        spio.update_time(0 | units.s)
+        spinup_delta_t =  les_spinup / les_spinup_steps
+        spio.update_time(spinup_delta_t | units.s) # time stamps are for the LES time at the end of the step
 
         if init_les_state:
             spcpl.gather_gcm_data(gcm_model, les_models, True)
@@ -200,26 +202,16 @@ def initialize(config, geometries, output_geometries=None):
                 run_spinup(les_models, gcm_model, les_spinup, les_spinup_steps)
 
     else:  # we're doing a restart
-        # The first time stepping that will happen next is by OpenIFS, to cloud scheme.
-        # should we set the forcings on OpenIFS again, here?
-        # the data to calculate those forcings may not be available now - they should be saved in the final step of the last run
-        # they are saved in spifs.nc
 
-        # only need ps - hope this doesn't have side effects
-        spcpl.gather_gcm_data(gcm_model, les_models, True)
-                       
-        for les in les_models:
-            # TODO - test if this is needed
-            spcpl.set_gcm_tendencies_from_file(gcm_model, les)
-
-            # here we actually want only ps
-            u, v, thl, qt, ps, ql = spcpl.convert_profiles(les)
-            les.set_surface_pressure(ps)
-            
-
-
-
+        # The time stepping that will happen  next is by OpenIFS, to cloud scheme.
+        # should we set the forcings on OpenIFS again, here, from spifs.nc ?
+        # -- not necessary.
         
+        # for les in les_models:
+        #     spcpl.set_gcm_tendencies_from_file(gcm_model, les)
+
+        pass
+            
     return gcm_model, les_models
 
 
@@ -277,20 +269,35 @@ def open_timing_file():
 # do one gcm time step
 # step les until it catches up
 def step(work_queue=None):
-    global timing_file
+    global timing_file,firststep
     if not timing_file:
        open_timing_file()
 
+    # don't write to spifs.nc at the first step of a restarted run.
+    # the first step seems to repeat the last step of the previous run.
+    writeCDF = (not(restart and firststep))
+
+    
+    t = gcm_model.get_model_time()
+    delta_t = gcm_model.get_timestep()
+    
+    log.info("gcm time at start of timestep is %s" % str(t))
+    # want this message before the time stepping
+    # until_cloud_scheme and cloud_scheme below do not change the model time
+    
     starttime = time.time()
     gcm_walltime1 = -time.time()
 
+    if writeCDF and not firststep: 
+        spio.update_time(gcm_model.get_model_time() + (les_spinup | units.s) + delta_t)
+    
     try:
         if gcm_model.first_half_step_done:
             # if we already did the first half step as part of the initialization,
             # don't repeat it now.
             gcm_model.first_half_step_done = False
         else:
-            log.info("gcm.evolve_model_until_cloud_scheme()")
+            log.info("gcm.evolve_model_until_cloud_scheme()")  
             gcm_model.evolve_model_until_cloud_scheme()
             log.info("gcm.evolve_model_cloud_scheme()")
             gcm_model.evolve_model_cloud_scheme()  # note: overwrites set tendencies
@@ -303,19 +310,24 @@ def step(work_queue=None):
     gcm_walltime1 += time.time()
     gcm_model.step += 1
 
-    t = gcm_model.get_model_time()
-    log.info("gcm evolved to %s" % str(t))
-
+    
     gather_gcm_data_walltime = -time.time()
-    spcpl.gather_gcm_data(gcm_model, les_models, cplsurf, output_column_indices)
+    spcpl.gather_gcm_data(gcm_model, les_models, cplsurf, output_column_indices, write=writeCDF)
     gather_gcm_data_walltime += time.time()
     
-    delta_t = gcm_model.get_timestep()
+
 
     set_les_forcings_walltime = -time.time()
     for les in les_models:
+        # if (restart and firststep):
+            # this is not needed - ps is already saved by Dales in the restart file
+            # first step of a restarted run, set surface pressure of LES. 
+            # ps = les.Phalf[-1]
+            # log.info("Setting surface pressure to %s, was %s"%(str(ps),str(les.get_surface_pressure())))
+            # les.set_surface_pressure(ps)
+            
         spcpl.set_les_forcings(les, gcm_model, dt_gcm=delta_t, factor=les_forcing_factor,
-                               couple_surface=cplsurf, qt_forcing=qt_forcing)
+                               couple_surface=cplsurf, qt_forcing=qt_forcing, write=writeCDF)
     set_les_forcings_walltime += time.time()
         
     # step les models to the end time of the current GCM step = t + delta_t
@@ -324,35 +336,43 @@ def step(work_queue=None):
     set_gcm_tendencies_walltime = -time.time()
     # get les state - for forcing on OpenIFS and les stats
     for les in les_models:
-        spcpl.set_gcm_tendencies(gcm_model, les, factor=gcm_forcing_factor)
+        spcpl.set_gcm_tendencies(gcm_model, les, factor=gcm_forcing_factor, write=writeCDF)
     set_gcm_tendencies_walltime += time.time()
         
     gcm_walltime2 = -time.time()
     gcm_model.evolve_model_from_cloud_scheme()
     gcm_walltime2 += time.time()
 
+    
+    log.info("gcm evolved to %s" % str(gcm_model.get_model_time()))
+    
     s = ('%10.2f %6.2f %6.2f %6.2f %6.2f %6.2f' % (starttime, gcm_walltime1, gather_gcm_data_walltime, set_les_forcings_walltime, set_gcm_tendencies_walltime, gcm_walltime2)
          + ' ' + ' '.join(['%6.2f' % t for t in les_wall_times]) + '\n')
     timing_file.write(s)
     timing_file.flush()
 
-    spio.update_time(gcm_model.get_model_time() + (les_spinup | units.s))
+
 
     # sync spifs.nc now, if we have no LES models.
     # if we do have LES models, we sync elsewhere, while the LES models are busy.
     if len(les_models) == 0:
         spio.sync_root()
 
+    firststep = False
 
 # Initialization function
 def step_spinup(les_list, work_queue, gcm, spinup_length):
-    global timing_file
+    global timing_file, firststep
 
     if not any(les_list): return
 
     if not timing_file:
         open_timing_file()
 
+    if not firststep:
+        # in the very first step, this has already been done in the initialization
+        spio.update_time(les_list[0].get_model_time() + (spinup_length | units.s))
+    
     starttime = time.time()
     
     t_les = les_list[0].get_model_time()
@@ -370,8 +390,9 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
     for les in les_list:
         spcpl.write_les_profiles(les)
     set_gcm_tendencies_walltime += time.time()
-        
-    spio.update_time(les_list[0].get_model_time())
+
+    firststep = False   
+
     
     gcm_walltime1 = 0
     gcm_walltime2 = 0
@@ -393,8 +414,8 @@ def finalize(save_restart=True):
         # save LES restart files
         for les in les_models:
             les.write_restart()
-        log.info("calling gcm.evolve_model_until_cloud_scheme() once more to write restart files")
-        gcm_model.evolve_model_until_cloud_scheme()
+        #log.info("calling gcm.evolve_model_until_cloud_scheme() once more to write restart files")
+        #gcm_model.evolve_model_until_cloud_scheme()
 
 
     log.info("spifs cleanup...")
@@ -546,7 +567,7 @@ def step_les_models(model_time, work_queue, offset=les_spinup):
             reqs = []
             pool = AsyncRequestsPool()
             for les in les_models:
-                req = les.evolve_model.async(model_time + (offset | units.s), exactEnd=True)
+                req = les.evolve_model.asynchronous(model_time + (offset | units.s), exactEnd=True)
                 reqs.append(req)
                 pool.add_request(req)
             # now while the dales threads are working, sync the netcdf to disk

@@ -69,7 +69,7 @@ def update_time(t):
     global cdf_root, cdf_step
     cdf_step = cdf_root.variables["Time"].shape[0]
     cdf_root.variables["Time"][cdf_step] = t.value_in(units.s)
-
+    log.info("update_time(): step %4d, time %6d s"%(cdf_step, t.value_in(units.s)))
 
 # Flushes the netcdf buffer to disc within thread lock
 def sync_root():

@@ -49,7 +49,7 @@ var_to_netcdf_name = {"Z0M": "z0m",
 
 
 # Retrieves all necessary vertical profiles to distribute to LES models:
-def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None):
+def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None,write=True):
     extra_cols = [] if output_column_indices is None else output_column_indices
     cols = [les.grid_index for les in les_models] + extra_cols
     start = time.time()
@@ -90,20 +90,21 @@ def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None)
             cdfname = var_to_netcdf_name.get(varname, varname)
             C[cdfname] = profile_data[varname][i + len(les_models)][:]
         output_column_conversion(C)
-        spio.write_netCDF_data(col,  U = C['U'].value_in(units.m/units.s),
-                                  V = C['V'].value_in(units.m/units.s),
-                                  T = C['T'].value_in(units.K),
-                                  SH = C['SH'].value_in(units.shu),
-                                  QL = C['QL'].value_in(units.mfu),
-                                  QI = C['QI'].value_in(units.mfu), #A.value_in(units.ccu)
-                                  Pf = C['Pf'].value_in(units.Pa),
-                                  Ph = C['Ph'].value_in(units.Pa),
-                                  Zf = C['Zf'].value_in(units.m),
-                                  Zh = C['Zh'].value_in(units.m),
-                                  Psurf = C['Psurf'].value_in(units.Pa),
-                                  Tv = C['Tv'].value_in(units.K),
-                                  THL = C['THL'].value_in(units.K),
-                                  QT = C['QT'].value_in(units.mfu))
+        if write:
+            spio.write_netCDF_data(col,  U = C['U'].value_in(units.m/units.s),
+                                   V = C['V'].value_in(units.m/units.s),
+                                   T = C['T'].value_in(units.K),
+                                   SH = C['SH'].value_in(units.shu),
+                                   QL = C['QL'].value_in(units.mfu),
+                                   QI = C['QI'].value_in(units.mfu), #A.value_in(units.ccu)
+                                   Pf = C['Pf'].value_in(units.Pa),
+                                   Ph = C['Ph'].value_in(units.Pa),
+                                   Zf = C['Zf'].value_in(units.m),
+                                   Zh = C['Zh'].value_in(units.m),
+                                   Psurf = C['Psurf'].value_in(units.Pa),
+                                   Tv = C['Tv'].value_in(units.K),
+                                   THL = C['THL'].value_in(units.K),
+                                   QT = C['QT'].value_in(units.mfu))
 
         
         
@@ -112,19 +113,19 @@ def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None)
                 C[varname] = surface_data[varname][i + len(les_models)]
             C['z0m'], C['z0h'], C['wthl'], C['wqt'] = convert_surface_fluxes(C)
 
-
-            spio.write_netCDF_data(col,
-                                   z0m=C['z0m'].value_in(units.m),
-                                   z0h=C['z0h'].value_in(units.m),
-                                   wthl=C['wthl'].value_in(units.m * units.s**-1 * units.K),
-                                   wqt=C['wqt'].value_in(units.m / units.s))
-
-            spio.write_netCDF_data(col,
-                                   TLflux=C['TLflux'].value_in(units.W / units.m**2),
-                                   TSflux=C['TSflux'].value_in(units.W / units.m**2),
-                                   SHflux=C['SHflux'].value_in(units.kg / units.m**2 / units.s),
-                                   QLflux=C['QLflux'].value_in(units.kg / units.m**2 / units.s),
-                                   QIflux=C['QIflux'].value_in(units.kg / units.m**2 / units.s))
+            if write:
+                spio.write_netCDF_data(col,
+                                       z0m=C['z0m'].value_in(units.m),
+                                       z0h=C['z0h'].value_in(units.m),
+                                       wthl=C['wthl'].value_in(units.m * units.s**-1 * units.K),
+                                       wqt=C['wqt'].value_in(units.m / units.s))
+                
+                spio.write_netCDF_data(col,
+                                       TLflux=C['TLflux'].value_in(units.W / units.m**2),
+                                       TSflux=C['TSflux'].value_in(units.W / units.m**2),
+                                       SHflux=C['SHflux'].value_in(units.kg / units.m**2 / units.s),
+                                       QLflux=C['QLflux'].value_in(units.kg / units.m**2 / units.s),
+                                       QIflux=C['QIflux'].value_in(units.kg / units.m**2 / units.s))
             
         # spio.write_netCDF_data(col, **C)
         # print('Storing extra column data', varname, C)
@@ -283,7 +284,7 @@ def set_les_state(les, u, v, thl, qt, ps=None):
 
 # Computes and applies the forcings to the les model before time stepping,
 # relaxing it toward the gcm mean state.
-def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
+def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', write=True):
     u, v, thl, qt, ps, ql = convert_profiles(les)
 
     # get dales slab averages
@@ -320,7 +321,8 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
     # log.info("  qt : %f" % (sputils.rms(f_qt)*dt_gcm))
 
     # store forcings on dales in the statistics
-    spio.write_les_data(les,f_u = f_u.value_in(units.m/units.s**2),
+    if write:
+        spio.write_les_data(les,f_u = f_u.value_in(units.m/units.s**2),
                             f_v = f_v.value_in(units.m/units.s**2),
                             f_thl = f_thl.value_in(units.K/units.s),
                             f_qt = f_qt.value_in(units.mfu/units.s),
@@ -346,18 +348,19 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
         les.set_z0h_surf(z0h)
         les.set_wt_surf(wt)
         les.set_wq_surf(wq)
-        spio.write_les_data(les,
-                            z0m=z0m.value_in(units.m),
-                            z0h=z0h.value_in(units.m),
-                            wthl=wt.value_in(units.m * units.s**-1 * units.K),
-                            wqt=wq.value_in(units.m / units.s))
-
-        spio.write_les_data(les,
-                            TLflux=les.TLflux.value_in(units.W / units.m**2),
-                            TSflux=les.TSflux.value_in(units.W / units.m**2),
-                            SHflux=les.SHflux.value_in(units.kg / units.m**2 / units.s),
-                            QLflux=les.QLflux.value_in(units.kg / units.m**2 / units.s),
-                            QIflux=les.QIflux.value_in(units.kg / units.m**2 / units.s))
+        if write:
+            spio.write_les_data(les,
+                                z0m=z0m.value_in(units.m),
+                                z0h=z0h.value_in(units.m),
+                                wthl=wt.value_in(units.m * units.s**-1 * units.K),
+                                wqt=wq.value_in(units.m / units.s))
+            
+            spio.write_les_data(les,
+                                TLflux=les.TLflux.value_in(units.W / units.m**2),
+                                TSflux=les.TSflux.value_in(units.W / units.m**2),
+                                SHflux=les.SHflux.value_in(units.kg / units.m**2 / units.s),
+                                QLflux=les.QLflux.value_in(units.kg / units.m**2 / units.s),
+                                QIflux=les.QIflux.value_in(units.kg / units.m**2 / units.s))
 
     if qt_forcing == 'variance':
         if les.get_model_time() > 0 | units.s:
@@ -368,7 +371,7 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp'):
 
 
 # Computes the LES tendencies upon the GCM:
-def set_gcm_tendencies(gcm,les,factor = 1):
+def set_gcm_tendencies(gcm,les,factor = 1, write=True):
 
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
 
@@ -394,7 +397,8 @@ def set_gcm_tendencies(gcm,les,factor = 1):
     # get real temperature from Dales - note it is calculated internally from thl and ql
     t_d = les.get_profile_T()
 
-    spio.write_les_data(les,u = u_d.value_in(units.m/units.s),
+    if write:
+        spio.write_les_data(les,u = u_d.value_in(units.m/units.s),
                             v = v_d.value_in(units.m/units.s),
                             presf = sp_d.value_in(units.Pa),
                             qt = qt_d.value_in(units.mfu),
@@ -453,7 +457,8 @@ def set_gcm_tendencies(gcm,les,factor = 1):
     gcm.set_profile_tendency("A", les.grid_index, f_A)
 
     # store forcings on GCM in the statistics in the corresponding LES group
-    spio.write_les_data(les,f_U = f_U.value_in(units.m/units.s**2),
+    if write:
+        spio.write_les_data(les,f_U = f_U.value_in(units.m/units.s**2),
                             f_V = f_V.value_in(units.m/units.s**2),
                             f_T = f_T.value_in(units.K/units.s),
                             f_SH = f_SH.value_in(units.shu/units.s),
@@ -461,6 +466,8 @@ def set_gcm_tendencies(gcm,les,factor = 1):
                             f_QL=f_QL.value_in(units.mfu/units.s), 
                             f_QI=f_QI.value_in(units.mfu/units.s))
 
+# sets GCM forcings using values from the spifs.nc file
+# not used - was thught to be necessary for restarts, but it isn't
 def set_gcm_tendencies_from_file(gcm, les):
     t = gcm.get_model_time()
     ti = abs((spio.cdf_root.variables['Time'] | units.s)  - t).argmin()
@@ -517,7 +524,7 @@ def write_les_profiles(les):
 
 # TODO this routine sometimes hangs for a very long time, especially if it is called when
 # variance nudging is not enabled in the LES
-def variability_nudge(les, gcm):
+def variability_nudge(les, gcm, write=True):
     # this cannot be used before the LES has been stepped - otherwise qsat and ql are not defined.
     
     qsat = les.get_field("Qsat")
@@ -591,6 +598,7 @@ def variability_nudge(les, gcm):
 
     qt_std = qt.std(axis=(0,1))
 
-    spio.write_les_data(les, qt_alpha=alpha.value_in(1/units.s))
-    spio.write_les_data(les, qt_beta=beta, qt_std=qt_std.value_in(units.mfu))
+    if write:
+        spio.write_les_data(les, qt_alpha=alpha.value_in(1/units.s))
+        spio.write_les_data(les, qt_beta=beta, qt_std=qt_std.value_in(units.mfu))
                         
