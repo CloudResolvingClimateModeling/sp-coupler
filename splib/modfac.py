@@ -26,9 +26,12 @@ log = logging.getLogger(__name__)
 
 
 # Factory method for model creation
-# TODO: use kwargs...   
+# TODO: use kwargs...
+# trestart is passed to Dales
+# restart_steps, if provided, is passed to OpenIFS, and used to schedule a restart after this number of steps
+#
 def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", channel_type="mpi", restart=False,
-                 starttime=None, index=-1, qt_forcing="sp", trestart=1000000 | units.s):
+                 starttime=None, index=-1, qt_forcing="sp", trestart=1000000 | units.s, restart_steps=None):
     ofile = os.path.join(workdir, model_type + ".out")
     efile = os.path.join(workdir, model_type + ".err")
     if model_type == oifs_type:
@@ -54,7 +57,8 @@ def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", chann
                        redirect_stdout_file=ofile,
                        redirect_stderr_file=efile,
                        channel_type=channel_type,
-                       workdir=workdir)  # , debugger='gdb')
+                       workdir=workdir,
+                       restart_steps = restart_steps)  # , debugger='gdb')
 
         setattr(oifs, "workdir", workdir)
 

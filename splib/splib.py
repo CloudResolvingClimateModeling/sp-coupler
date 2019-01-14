@@ -1,7 +1,7 @@
 # Superparameteriation coupling code for OpenIFS <--> Dales
 #
 # Fredrik Jansson, Gijs van den Oord 
-# 2017-2018
+# 2017-2019
 # 
 
 
@@ -202,14 +202,6 @@ def initialize(config, geometries, output_geometries=None):
                 run_spinup(les_models, gcm_model, les_spinup, les_spinup_steps)
 
     else:  # we're doing a restart
-
-        # The time stepping that will happen  next is by OpenIFS, to cloud scheme.
-        # should we set the forcings on OpenIFS again, here, from spifs.nc ?
-        # -- not necessary.
-        
-        # for les in les_models:
-        #     spcpl.set_gcm_tendencies_from_file(gcm_model, les)
-
         pass
             
     return gcm_model, les_models
@@ -319,13 +311,6 @@ def step(work_queue=None):
 
     set_les_forcings_walltime = -time.time()
     for les in les_models:
-        # if (restart and firststep):
-            # this is not needed - ps is already saved by Dales in the restart file
-            # first step of a restarted run, set surface pressure of LES. 
-            # ps = les.Phalf[-1]
-            # log.info("Setting surface pressure to %s, was %s"%(str(ps),str(les.get_surface_pressure())))
-            # les.set_surface_pressure(ps)
-            
         spcpl.set_les_forcings(les, gcm_model, dt_gcm=delta_t, factor=les_forcing_factor,
                                couple_surface=cplsurf, qt_forcing=qt_forcing, write=writeCDF)
     set_les_forcings_walltime += time.time()
@@ -414,15 +399,10 @@ def finalize(save_restart=True):
         # save LES restart files
         for les in les_models:
             les.write_restart()
-        #log.info("calling gcm.evolve_model_until_cloud_scheme() once more to write restart files")
-        #gcm_model.evolve_model_until_cloud_scheme()
-
 
     log.info("spifs cleanup...")
     log.info("Stopping gcm...")
     try:
-        # pass
-        # removing the cleanup, trying to prevent the model from hanging at the end - didn't help
         gcm_model.cleanup_code()
         gcm_model.stop()
     except Exception as e:
@@ -473,7 +453,8 @@ def gcm_init(gcmtype, inputdir, workdir, couple_surface):
                                 nprocs=gcm_num_procs,
                                 redirect=gcm_redirect,
                                 channel_type=channel_type,
-                                restart=restart)
+                                restart=restart,
+                                restart_steps=gcm_steps)
     model.initialize_code()
     model.exp_name = gcm_exp_name
     model.num_steps = gcm_steps
@@ -495,10 +476,9 @@ def les_init(lestype, inputdir, workdir, starttime, index):
     if lestype == modfac.ncbased_type:
         typekey = modfac.ncfile_les_type
 
-    #trestart = 1000000 | units.s # large value -> no restart file written
-
-    # schedule restart files to be written at the end of the run
-    #trestart = gcm_steps * (900 | units.s) # TODO: gcm dt currently hardcoded
+    # optionally, schedule restart files to be written at the end of the run
+    # currently, one restart is explicitly requested at the end of the run, in filanlize()
+    # trestart = gcm_steps * (900 | units.s) # TODO: gcm dt currently hardcoded
     # if not restart:
     #    trestart += les_spinup | units.s             
     #    # add spinup time to trestart

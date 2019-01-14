@@ -252,7 +252,7 @@ def main():
 
     splib.initialize(args.__dict__, geometries, output_geometries)
 
-    splib.run(args.gcm_steps)
+    splib.run(args.gcm_steps+1) # do one extra step - when restarting there is a one-step overlap
 
     splib.finalize()
 
