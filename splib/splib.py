@@ -29,7 +29,9 @@ import psutil
 
 from amuse.community import *
 from amuse.rfi import channel  # to query MPI threading support
-from amuse.rfi.channel import AsyncRequestsPool
+
+#from amuse.rfi.channel import AsyncRequestsPool
+from amuse.rfi.async_request import AsyncRequestsPool
 
 # Logger
 log = logging.getLogger(__name__)
@@ -494,7 +496,7 @@ def les_init(lestype, inputdir, workdir, starttime, index):
                                 starttime=starttime,
                                 index=index,
                                 qt_forcing=qt_forcing)
-    model.initialize_code()
+#    model.initialize_code()
     model.commit_parameters()
     model.commit_grid()
     return model
