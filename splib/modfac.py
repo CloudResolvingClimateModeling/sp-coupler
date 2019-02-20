@@ -69,7 +69,8 @@ def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", chann
 
         qt_forcings = {"sp": Dales.QT_FORCING_GLOBAL,
                        "variance": Dales.QT_FORCING_VARIANCE,
-                       "local": Dales.QT_FORCING_LOCAL}
+                       "local": Dales.QT_FORCING_LOCAL,
+                       "strong": Dales.QT_FORCING_STRONG}
 
         if not restart:
             files = glob.glob(os.path.join(inputdir, '*'))
