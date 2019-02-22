@@ -104,7 +104,8 @@ def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None,
                                    Psurf = C['Psurf'].value_in(units.Pa),
                                    Tv = C['Tv'].value_in(units.K),
                                    THL = C['THL'].value_in(units.K),
-                                   QT = C['QT'].value_in(units.mfu))
+                                   QT = C['QT'].value_in(units.mfu),
+                                   A = C['A'].value_in(units.ccu))
 
         
         
@@ -463,8 +464,11 @@ def set_gcm_tendencies(gcm,les,factor = 1, write=True):
                             f_T = f_T.value_in(units.K/units.s),
                             f_SH = f_SH.value_in(units.shu/units.s),
                             A = A.value_in(units.ccu),
+                            A_d = A_d.value_in(units.ccu),
                             f_QL=f_QL.value_in(units.mfu/units.s), 
-                            f_QI=f_QI.value_in(units.mfu/units.s))
+                            f_QI=f_QI.value_in(units.mfu/units.s),
+                            f_A=f_A.value_in(units.ccu/units.s)
+        )
 
 # sets GCM forcings using values from the spifs.nc file
 # not used - was thught to be necessary for restarts, but it isn't
