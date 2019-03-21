@@ -220,7 +220,7 @@ def main():
 
     parser.add_argument("--qt_forcing", dest="qt_forcing",
                         metavar="TYPE",
-                        choices=["sp", "variance", "local"],
+                        choices=["sp", "variance", "local", "strong"],
                         type=str,
                         default="sp",
                         help="qt forcing type on LES (stimulate ql alignment with variance or local forcing)")

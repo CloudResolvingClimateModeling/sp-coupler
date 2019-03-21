@@ -184,7 +184,9 @@ def create_netcdf_subgroup(rootgrp, subgroup, lat, lon, with_surf_vars=True):
                        ('Zh', 'm'),
                        ('THL', 'K'),
                        ('QT', '1'),
-                       ('A', '1')):
+                       ('A', '1'),     # cloud fraction IFS
+                       ('A_d', '1'),   # cloud fraction on IFS levels computed in Dales
+                       ):
         p = grp.createVariable(name, "f4", ("Time", "oifs_height"))
         p.units = unit
 

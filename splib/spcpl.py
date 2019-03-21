@@ -92,21 +92,21 @@ def gather_gcm_data(gcm, les_models, couple_surface, output_column_indices=None,
             C[cdfname] = profile_data[varname][i + len(les_models)][:]
         output_column_conversion(C)
         if write:
-            spio.write_netCDF_data(col, U=C['U'].value_in(units.m / units.s),
-                                   V=C['V'].value_in(units.m / units.s),
-                                   T=C['T'].value_in(units.K),
-                                   SH=C['SH'].value_in(units.shu),
-                                   QL=C['QL'].value_in(units.mfu),
-                                   QI=C['QI'].value_in(units.mfu),  # A.value_in(units.ccu)
-                                   Pf=C['Pf'].value_in(units.Pa),
-                                   Ph=C['Ph'].value_in(units.Pa),
-                                   Zf=C['Zf'].value_in(units.m),
-                                   Zh=C['Zh'].value_in(units.m),
-                                   Psurf=C['Psurf'].value_in(units.Pa),
-                                   Tv=C['Tv'].value_in(units.K),
-                                   THL=C['THL'].value_in(units.K),
-                                   QT=C['QT'].value_in(units.mfu))
-
+            spio.write_netCDF_data(col,  U = C['U'].value_in(units.m/units.s),
+                                   V = C['V'].value_in(units.m/units.s),
+                                   T = C['T'].value_in(units.K),
+                                   SH = C['SH'].value_in(units.shu),
+                                   QL = C['QL'].value_in(units.mfu),
+                                   QI = C['QI'].value_in(units.mfu), #A.value_in(units.ccu)
+                                   Pf = C['Pf'].value_in(units.Pa),
+                                   Ph = C['Ph'].value_in(units.Pa),
+                                   Zf = C['Zf'].value_in(units.m),
+                                   Zh = C['Zh'].value_in(units.m),
+                                   Psurf = C['Psurf'].value_in(units.Pa),
+                                   Tv = C['Tv'].value_in(units.K),
+                                   THL = C['THL'].value_in(units.K),
+                                   QT = C['QT'].value_in(units.mfu),
+                                   A = C['A'].value_in(units.ccu))
         if couple_surface:
             for varname in surf_vars:
                 C[varname] = surface_data[varname][i + len(les_models)]
@@ -459,14 +459,16 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
 
     # store forcings on GCM in the statistics in the corresponding LES group
     if write:
-        spio.write_les_data(les, f_U=f_U.value_in(units.m / units.s ** 2),
-                            f_V=f_V.value_in(units.m / units.s ** 2),
-                            f_T=f_T.value_in(units.K / units.s),
-                            f_SH=f_SH.value_in(units.shu / units.s),
-                            A=A.value_in(units.ccu),
-                            f_QL=f_QL.value_in(units.mfu / units.s),
-                            f_QI=f_QI.value_in(units.mfu / units.s))
-
+        spio.write_les_data(les,f_U = f_U.value_in(units.m/units.s**2),
+                            f_V = f_V.value_in(units.m/units.s**2),
+                            f_T = f_T.value_in(units.K/units.s),
+                            f_SH = f_SH.value_in(units.shu/units.s),
+                            A = A.value_in(units.ccu),
+                            A_d = A_d.value_in(units.ccu),
+                            f_QL=f_QL.value_in(units.mfu/units.s), 
+                            f_QI=f_QI.value_in(units.mfu/units.s),
+                            f_A=f_A.value_in(units.ccu/units.s)
+        )
 
 # sets GCM forcings using values from the spifs.nc file
 # not used - was thught to be necessary for restarts, but it isn't
