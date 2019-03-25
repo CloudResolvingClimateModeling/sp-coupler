@@ -72,15 +72,19 @@ def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", chann
                        "local": Dales.QT_FORCING_LOCAL,
                        "strong": Dales.QT_FORCING_STRONG}
 
-        if not restart:
-            files = glob.glob(os.path.join(inputdir, '*'))
-            log.info("Linking Dales input files from %s..." % inputdir)
-            sputils.link_dir(files, workdir)
+# copying of input files is now done by the Dales interface
+# ToDo: interface should handle restarts 
+#        if not restart:
+#            files = glob.glob(os.path.join(inputdir, '*'))
+#            log.info("Linking Dales input files from %s..." % inputdir)
+#            sputils.link_dir(files, workdir)
 
-        dales = Dales(number_of_workers=nprocs,
+
+        dales = Dales(inputdir=inputdir,
+                      number_of_workers=nprocs,
                       redirection=redirect,
-                      redirect_stdout_file=ofile,
-                      redirect_stderr_file=efile,
+#                      redirect_stdout_file=ofile,  # ToDo
+#                      redirect_stderr_file=efile,
                       channel_type=channel_type,
                       workdir=workdir)  # , debugger='gdb')
         dales.parameters.restart_flag = restart
@@ -88,7 +92,7 @@ def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", chann
         if starttime is not None:
             dales.parameters.starttime = starttime
         dales.parameters.qt_forcing = qt_forcings[qt_forcing]
-        setattr(dales, "workdir", workdir)
+#        setattr(dales, "workdir", workdir)
         return dales
 
     elif model_type == dummy_gcm_type:

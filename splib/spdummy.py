@@ -19,6 +19,16 @@ class dummy_base(object):
         self.model_time = 0 | units.s
         self.number_of_workers = nprocs
         self.support_async = False
+        self.itot, self.jtot, self.ktot = 10, 10, 20
+
+    def get_itot(self):
+        return self.itot
+
+    def get_jtot(self):
+        return self.jtot
+
+    def get_ktot(self):
+        return self.ktot
 
     def get_timestep(self):
         return self.timestep
@@ -63,6 +73,15 @@ class dummy_gcm(dummy_base):
         self.step_time = 0.
         log.info("Initialized dummy gcm with %d latitudes, %d longitudes and %d vertical layers" % (
             self.num_lats, self.num_lons, self.ktot))
+
+    def get_itot(self):
+        return self.num_lons
+
+    def get_jtot(self):
+        return self.num_lats
+
+    def get_ktot(self):
+        return self.ktot
 
     def get_start_datetime(self):
         return self.starttime
@@ -180,6 +199,15 @@ class dummy_les(dummy_base):
         self.sp = 100000. | units.Pa
         self.step_time = 0.
         log.info("Initialized dummy les with %d x-coords, %d y-coords and %d z-coords" % (self.itot, self.jtot, self.k))
+
+    def get_itot(self):
+        return self.itot
+
+    def get_jtot(self):
+        return self.jtot
+
+    def get_ktot(self):
+        return self.k
 
     # noinspection PyMethodMayBeStatic
     def initialize_code(self):

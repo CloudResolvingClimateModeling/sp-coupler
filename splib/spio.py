@@ -71,6 +71,7 @@ def update_time(t):
     cdf_root.variables["Time"][cdf_step] = t.value_in(units.s)
     log.info("update_time(): step %4d, time %6d s"%(cdf_step, t.value_in(units.s)))
 
+
 # Flushes the netcdf buffer to disc within thread lock
 def sync_root():
     global cdf_root, cdf_lock
@@ -90,11 +91,11 @@ def open_netcdf(nc_name, oifs, les, start_time):
 
     # dimensions
     if les:
-        root_group.createDimension("x", les.itot)
-        root_group.createDimension("y", les.jtot)
-        root_group.createDimension("zf", les.k)
+        root_group.createDimension("x", les.get_itot())
+        root_group.createDimension("y", les.get_jtot())
+        root_group.createDimension("zf", les.get_ktot())
 
-    root_group.createDimension("oifs_height", oifs.ktot)  # height dimension for oifs - note varying pressures and
+    root_group.createDimension("oifs_height", oifs.get_ktot())  # height dimension for oifs - note varying pressures and
     # heights
     root_group.createDimension("Time", None)  # time dimension for openIFS steps and forcings
 
@@ -102,12 +103,12 @@ def open_netcdf(nc_name, oifs, les, start_time):
     if les:
         dx = les.dx.value_in(units.m)
         xs = root_group.createVariable("x", "f4", ("x",))
-        xs[:] = numpy.linspace(dx / 2, les.xsize.value_in(units.m) - dx / 2, les.itot)
+        xs[:] = numpy.linspace(dx / 2, les.xsize.value_in(units.m) - dx / 2, les.get_itot())
         xs.units = 'm'
 
         dy = les.dy.value_in(units.m)
         ys = root_group.createVariable("y", "f4", ("y",))
-        ys[:] = numpy.linspace(dy / 2, les.ysize.value_in(units.m) - dy / 2, les.jtot)
+        ys[:] = numpy.linspace(dy / 2, les.ysize.value_in(units.m) - dy / 2, les.get_jtot())
         ys.units = 'm'
 
         zfs = root_group.createVariable("zf", "f4", ("zf",))  # full z levels

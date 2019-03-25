@@ -100,6 +100,15 @@ class netcdf_gcm(netcdf_model_base):
         log.info("Initialized netcdf gcm with %d latitudes, %d longitudes and %d vertical layers" % (
             self.num_lats, self.num_lons, self.ktot))
 
+    def get_itot(self):
+        return self.num_lons
+
+    def get_jtot(self):
+        return self.num_lats
+
+    def get_ktot(self):
+        return self.ktot
+
     def initialize_code(self):
         log.info("Initialize netcdf gcm code")
 
@@ -181,6 +190,15 @@ class netcdf_les(netcdf_model_base):
             self.sp = self.group.variables["Psurf"][0] | units.Pa
         self.step_time = 0.
         log.info("Initialized netcdf les with %d x-coords, %d y-coords and %d z-coords" % (self.itot, self.jtot, self.k))
+
+    def get_itot(self):
+        return self.itot
+
+    def get_jtot(self):
+        return self.jtot
+
+    def get_ktot(self):
+        return self.k
 
     @property
     def grid_index(self):
