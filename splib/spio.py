@@ -101,18 +101,18 @@ def open_netcdf(nc_name, oifs, les, start_time):
 
     # coordinate variables
     if les:
-        dx = les.dx.value_in(units.m)
+        dx = les.get_dx().value_in(units.m)
         xs = root_group.createVariable("x", "f4", ("x",))
-        xs[:] = numpy.linspace(dx / 2, les.xsize.value_in(units.m) - dx / 2, les.get_itot())
+        xs[:] = numpy.linspace(dx / 2, les.get_xsize().value_in(units.m) - dx / 2, les.get_itot())
         xs.units = 'm'
 
-        dy = les.dy.value_in(units.m)
+        dy = les.get_dy().value_in(units.m)
         ys = root_group.createVariable("y", "f4", ("y",))
-        ys[:] = numpy.linspace(dy / 2, les.ysize.value_in(units.m) - dy / 2, les.get_jtot())
+        ys[:] = numpy.linspace(dy / 2, les.get_ysize().value_in(units.m) - dy / 2, les.get_jtot())
         ys.units = 'm'
 
         zfs = root_group.createVariable("zf", "f4", ("zf",))  # full z levels
-        zfs[:] = les.zf.value_in(units.m)
+        zfs[:] = les.get_zf_().value_in(units.m)
         zfs.units = 'm'
 
     times = root_group.createVariable("Time", "f4", ("Time",))
