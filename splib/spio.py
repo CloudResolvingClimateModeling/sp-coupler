@@ -95,7 +95,7 @@ def open_netcdf(nc_name, oifs, les, start_time):
         root_group.createDimension("y", les.get_jtot())
         root_group.createDimension("zf", les.get_ktot())
 
-    root_group.createDimension("oifs_height", oifs.get_ktot())  # height dimension for oifs - note varying pressures and
+    root_group.createDimension("oifs_height", oifs.ktot)  # height dimension for oifs - note varying pressures and
     # heights
     root_group.createDimension("Time", None)  # time dimension for openIFS steps and forcings
 
