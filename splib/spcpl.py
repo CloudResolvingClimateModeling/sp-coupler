@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 def get_cloud_fraction(les):
     # construct a mapping of indices between openIFS levels and Dales height levels
     Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.
-    zh = les.zh
+    zh = les.get_zh()
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
     # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     A = les.get_cloudfraction(indices)[::-1]  # reverse order
@@ -201,7 +201,7 @@ def convert_profiles(les, write=True):
     #   Zf must be increasing, so reverse the gcm arrays
     #   outside the range of Zf, interp returns the first or the last point of the range
 
-    h = les.zf
+    h = les.get_zf()
 
     thl = sputils.interp(h, Zf[::-1], thl_[::-1])
     qt = sputils.interp(h, Zf[::-1], qt_[::-1])
@@ -378,7 +378,7 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.zf
+    h = les.get_zf()
     u_d = les.get_profile_U()
     v_d = les.get_profile_V()
     sp_d = les.get_presf()
@@ -492,7 +492,7 @@ def write_les_profiles(les):
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.zf
+    h = les.get_zf()
     u_d = les.get_profile_U()
     v_d = les.get_profile_V()
     sp_d = les.get_presf()
