@@ -112,7 +112,7 @@ def open_netcdf(nc_name, oifs, les, start_time):
         ys.units = 'm'
 
         zfs = root_group.createVariable("zf", "f4", ("zf",))  # full z levels
-        zfs[:] = les.get_zf_().value_in(units.m)
+        zfs[:] = les.get_zf().value_in(units.m)
         zfs.units = 'm'
 
     times = root_group.createVariable("Time", "f4", ("Time",))
