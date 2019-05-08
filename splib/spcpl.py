@@ -16,6 +16,66 @@ log = logging.getLogger(__name__)
 
 # Superparametrization coupling methods
 
+def integral (a, b, z, q):
+    """
+    Calculate the integral from a to b of the piece-wise constant function q(z).
+    q(z) has the value q[i] on the interval from z[i] to z[i+1].
+    
+    Appropriate for integrating finite-volume quantities.
+
+
+    Parameters
+    ----------
+    a, b : interval end points
+    z : increasing array of point coordinates
+    q : array of function values (length one less than z)
+
+    
+    """
+    if len(z) != len(q) + 1:
+        print("len(z) should be len(q) + 1")
+    if a < z[0] or a > z[-1] or b < z[0] or b > z[-1]:
+        print("integral: Interval end point outside range.")
+        return None
+
+    sign = 1
+    if a > b:
+        sign = -1
+        a,b = b,a
+
+    ia = 0; ib = 0
+    while z[ia+1] < a:
+        ia += 1
+    while z[ib+1] < b:
+        ib += 1
+
+    # z[ia] <= a <= z[ia+1]   and   a <= b
+    # z[ib] <= b <= z[ib+1]
+    
+        
+    #print("integral: a=%f, ia=%d, z[ia],z[ia+1] = %f, %f"%(a, ia, z[ia], z[ia+1]))
+    #print("integral: b=%f, ib=%d, z[ib],z[ib+1] = %f, %f"%(b, ib, z[ib], z[ib+1]))
+
+
+    # sum intervals, including the full edge intervals
+    #S = 0
+    #for i in range(ia, ib+1):
+    #    S += q[i] * (z[i+1]-z[i])
+
+    # numpy version - sum intervals, including the full edge intervals
+    S = (q[ia:ib+1] * (z[ia+1:ib+2] - z[ia:ib+1])).sum() 
+        
+    # subtract edge intervals
+    Sa = q[ia] * (a - z[ia])
+    Sb = q[ib] * (z[ib+1] - b)
+
+    #print("integral: sum: %f"%S)
+    #print("integral: a-part: %f"%Sa)
+    #print("integral: b-part: %f"%Sb)
+    #print("integral: total %f"%((S - Sa - Sb)*sign))
+    return (S - Sa - Sb) * sign
+
+
 # Retrieves the les model cloud fraction
 def get_cloud_fraction(les):
     # construct a mapping of indices between openIFS levels and Dales height levels
