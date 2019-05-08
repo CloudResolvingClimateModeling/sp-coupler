@@ -386,6 +386,8 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
     u_d = les.get_profile_U()
     v_d = les.get_profile_V()
     sp_d = les.get_presf()
+    rhof_d = les.get_rhof()
+    rhobf_d = les.get_rhobf()
     thl_d = les.get_profile_THL()
     qt_d = les.get_profile_QT()
     ql_d = les.get_profile_QL()
@@ -407,6 +409,8 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
         spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
                             v=v_d.value_in(units.m / units.s),
                             presf=sp_d.value_in(units.Pa),
+                            rhof=rhof_d.value_in(units.kg / units.m**3),
+                            rhobf=rhobf_d.value_in(units.kg / units.m**3),
                             qt=qt_d.value_in(units.mfu),
                             ql=ql_d.value_in(units.mfu),
                             ql_ice=ql_ice_d.value_in(units.mfu),

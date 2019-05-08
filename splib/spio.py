@@ -145,6 +145,8 @@ def create_netcdf_les_subgroup(rootgrp, les, with_surf_vars=True):
                        ('f_thl', 'K/s'),
                        ('f_qt', '1/s'),
                        ('presf', 'Pa/s'),
+                       ('rhof', 'kg/m^3'),
+                       ('rhobf','kg/m^3'),
                        ('qt_std', '1'),
                        ('qt_alpha', '1/s'),
                        ('qt_beta', '1')):
@@ -200,7 +202,7 @@ def create_netcdf_subgroup(rootgrp, subgroup, lat, lon, with_surf_vars=True):
         srf += [('z0m', 'm')]
         srf += [('z0h', 'm')]
         srf += [('wthl', 'K m/s')]
-        srf += [('wqt', 'kg m/s')]
+        srf += [('wqt', 'kg/kg m/s')]
         srf += [('TLflux', 'W/m^2')]
         srf += [('TSflux', 'W/m^2')]
         srf += [('SHflux', 'kg / m^2s')]
