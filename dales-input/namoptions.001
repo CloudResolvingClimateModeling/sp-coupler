@@ -1,5 +1,4 @@
 &RUN
-outfile    = 'dales.out'
 iexpnr     =  001
 lwarmstart =  .false.
 startfile  =  'initd00h01m000.001'
@@ -17,12 +16,12 @@ peclet     = .1
 /
 
 &DOMAIN
-itot       =  64
-jtot       =  64
+itot       =  16
+jtot       =  16
 kmax       =  160
 
-xsize      =  12800.
-ysize      =  12800.
+xsize      =  3200.
+ysize      =  3200.
 
 xlat       =  51.96
 xlon       =  4.95
@@ -74,7 +73,6 @@ iadv_sv     =  0,52
 
 &NAMSUBGRID
 lsmagorinsky = .false.
-sgs_surface_fix = .false.
 /
 
 &NAMCHECKSIM

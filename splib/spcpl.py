@@ -366,7 +366,7 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
         rain_last = les.rain
     except:
         rain_last = 0 | units.kg / units.m ** 2
-    rain = les.get_rain()
+    rain = 0  | units.kg / units.m ** 2 # les.get_rain() # !!! no get_rain in official dales interface yet
     les.rain = rain
     rainrate = (rain - rain_last) / dt_gcm
 
