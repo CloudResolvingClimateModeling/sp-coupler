@@ -56,9 +56,8 @@ make
 
 
 %environment
-
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/
 GRIB_SAMPLES_PATH=/usr/local/share/grib_api/ifs_samples/grib1_mlgrib2
 MODULEPATH=/etc/modulefiles
-
 export GRIB_SAMPLES_PATH MODULEPATH
 
