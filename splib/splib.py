@@ -119,7 +119,7 @@ def initialize(config, geometries, output_geometries=None):
     grid_indices = sputils.get_mask_indices(zip(lons, lats), geometries, max_num_les)
     output_geoms = [] if output_geometries is None else output_geometries
     output_column_indices = sputils.get_mask_indices(zip(lons, lats), output_geoms)
-
+    
     # exclude columns with embedded LES from the output_column_indices 
     output_column_indices = list(set(output_column_indices) - set(grid_indices))
     output_columns = [(i, lats[i], lons[i]) for i in output_column_indices]
@@ -149,8 +149,9 @@ def initialize(config, geometries, output_geometries=None):
         gcm_model.set_mask(i)  # tell GCM that a LES instance is present at this point
         les.grid_index = i
         les.lat, les.lon = lats[i], lons[i]
+        les.zh_cache = les.get_zh()
         les_models.append(les)
-
+    
     spio.init_netcdf(output_name, gcm_model, les_models, startdate, output_columns, append=restart,
                      with_surf_vars=cplsurf)
     log.info("Successfully initialized GCM and %d LES instances" % len(les_models))
@@ -201,13 +202,12 @@ def initialize(config, geometries, output_geometries=None):
                 spcpl.set_les_state(les, u, v, thl, qt, ps)
         
             if les_spinup > 0:
-                run_spinup(les_models, gcm_model, les_spinup, les_spinup_steps)
+              run_spinup(les_models, gcm_model, les_spinup, les_spinup_steps)
 
     else:  # we're doing a restart
         pass
-            
+ 
     return gcm_model, les_models
-
 
 # Run loop: executes nsteps time steps of the super-parametrized GCM
 def run(nsteps):
@@ -318,12 +318,12 @@ def step(work_queue=None):
     set_les_forcings_walltime += time.time()
         
     # step les models to the end time of the current GCM step = t + delta_t
-    les_wall_times = step_les_models(t + delta_t, work_queue, offset=les_spinup)
+    les_wall_times, profiles = step_les_models(t + delta_t, work_queue, offset=les_spinup)
 
     set_gcm_tendencies_walltime = -time.time()
     # get les state - for forcing on OpenIFS and les stats
     for les in les_models:
-        spcpl.set_gcm_tendencies(gcm_model, les, factor=gcm_forcing_factor, write=writeCDF)
+        spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les], factor=gcm_forcing_factor, write=writeCDF)
     set_gcm_tendencies_walltime += time.time()
         
     gcm_walltime2 = -time.time()
@@ -332,7 +332,6 @@ def step(work_queue=None):
 
     
     log.info("gcm evolved to %s" % str(gcm_model.get_model_time()))
-    
     s = ('%10.2f %6.2f %6.2f %6.2f %6.2f %6.2f' % (starttime, gcm_walltime1, gather_gcm_data_walltime, set_les_forcings_walltime, set_gcm_tendencies_walltime, gcm_walltime2)
          + ' ' + ' '.join(['%6.2f' % t for t in les_wall_times]) + '\n')
     timing_file.write(s)
@@ -371,7 +370,7 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
     set_les_forcings_walltime += time.time()
         
     # step les models
-    les_wall_times = step_les_models(t_les + (spinup_length | units.s), work_queue, offset=0)
+    les_wall_times , profiles = step_les_models(t_les + (spinup_length | units.s), work_queue, offset=0)
 
     set_gcm_tendencies_walltime = -time.time() # assign the profile writing time to the same slot as setting gcm tendencies
     for les in les_list:
@@ -542,56 +541,44 @@ def stop_worker_threads(work_queue, worker_threads):
 def step_les_models(model_time, work_queue, offset=les_spinup):
     global errorFlag
     les_wall_times = []
+    les_profiles = {}
     if not any(les_models):
         return les_wall_times
     if les_queue_threads >= len(les_models):  # Step all dales models in parallel
         if async_evolve:  # evolve all dales models with asynchronous Amuse calls
             reqs = []
+            profile_reqs={}
             pool = AsyncRequestsPool()
             for les in les_models:
-                req = les.evolve_model.asynchronous(model_time + (offset | units.s), exactEnd=True)
-                reqs.append(req)
-                pool.add_request(req)
+               req=les.evolve_model.asynchronous(model_time + (offset | units.s), exactEnd=True)
+	       reqs.append(req)
+               pool.add_request(req)
+               profiles=spcpl.get_les_profiles(les, True)
+               profile_reqs[les] = profiles
+               for r in profiles.values():
+                   pool.add_request(r)
             # now while the dales threads are working, sync the netcdf to disk
             spio.sync_root()
             # wait for all threads
+            #return pool, requests
             pool.waitall()
+	    for les, prof in profile_reqs.items():
+                les_profiles[les] = {v : r.result() for v,r in prof.items()}
             try:
                 les_wall_times = [r.result().value_in(units.s) for r in reqs]
                 log.info("async step_les_models() done. Elapsed times:" + str(['%5.1f' % t for t in les_wall_times]))
             except Exception as e:
                 log.error("Exception caught while gathering results: %s" % e.message)
 
-        else:  # evolve all dales models using python threads
-            threads = []
-            for les in les_models:
-                t = threading.Thread(target=step_les, args=(les, model_time, offset), name=str(les.grid_index))
-                # t.setDaemon(True)
-                threads.append(t)
-                t.start()
-            # now while the dales threads are working, sync the netcdf to disk
-            spio.sync_root()
-            # wait for all threads
-            for t in threads:
-                # log.info("Waiting to join thread %s..." % t.name)
-                t.join()
-            # log.info("joined thread %s" % t.name)
-    elif les_queue_threads > 1:
-        for les in les_models:
-            work_queue.put((les, model_time))  # enqueue all dales instances
-        # now while the dales threads are working, sync the netcdf to disk
-        spio.sync_root()
-        work_queue.join()  # wait for all dales work to be completed
-        if errorFlag:
-            log.info("One thread failed - exiting ...")
-            # stop_worker_threads(work_queue)  #  signal worker threads to quit - now an atexit function, should not
-            # need it here
-            finalize()
-            sys.exit(1)
     else:  # sequential version
         for les in les_models:
-            step_les(les, model_time, offset)
-    return les_wall_times
+            walltime=step_les(les, model_time, offset)
+            les_wal_times.append(walltime)
+            profiles=spcpl.get_les_profiles(les, False)
+            les_profiles[les] = profiles
+        log.info("sequential step_les_models() done. Elapsed times:" + str(['%5.1f' % t for t in les_wall_times]))
+
+    return les_wall_times, les_profiles
 
 
 # step a dales instance to a given Time
@@ -602,15 +589,17 @@ def step_les(les, stoptime, offset=0):
     epsilon = 1 | units.s  # tolerance for fp comparison
     if not les_dt > 0:
         # simply step until caught up
+        start = time.time()
         les.evolve_model(stoptime + (offset | units.s), exactEnd=1)
+        walltime = start - time.time() 
     else:
         # fixed-length stepping intervals to save statistics during the les run
+        start = time.time()
         t = les.get_model_time()
         log.info("Les at point %d starts at %.0f, should reach %.0f with offset %d" % (
             les.grid_index, t.value_in(units.s), stoptime.value_in(units.s), offset))
         while t < stoptime - epsilon + (offset | units.s):
             t += step_dt
             les.evolve_model(t, exactEnd=1)
-    t = les.get_model_time()
-    walltime = time.time() - start
-    log.info("Les at point %d evolved to %.0f s - elapsed %f s" % (les.grid_index, t.value_in(units.s), walltime))
+        walltime = start - time.time()
+    return walltime

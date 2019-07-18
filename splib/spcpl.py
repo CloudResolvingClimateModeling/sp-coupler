@@ -6,6 +6,7 @@ import logging
 from omuse.units import units
 import sputils
 import spio
+import sys
 from scipy.optimize import brentq
 
 # ~ from brent import brentq
@@ -18,11 +19,11 @@ log = logging.getLogger(__name__)
 
 # Retrieves the les model cloud fraction
 def get_cloud_fraction(les):
+    Zh = les.gcm_Zh
+    zh = les.zh_cache
     # construct a mapping of indices between openIFS levels and Dales height levels
-    Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.
-    zh = les.get_zh()
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
-    # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
+     # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     A = les.get_cloudfraction(indices)[::-1]  # reverse order
     return A
 
@@ -374,31 +375,29 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
 
 
 # Computes the LES tendencies upon the GCM:
-def set_gcm_tendencies(gcm, les, factor=1, write=True):
+def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
-
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.get_zf()
-    u_d = les.get_profile_U()
-    v_d = les.get_profile_V()
-    sp_d = les.get_presf()
-    thl_d = les.get_profile_THL()
-    qt_d = les.get_profile_QT()
-    ql_d = les.get_profile_QL()
-    ql_ice_d = les.get_profile_QL_ice()  # ql_ice is the ice part of QL
-    ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
-    qr_d = les.get_profile_QR()
-    A_d = get_cloud_fraction(les)
+    Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.    
+    h = profile["zf"]
+    u_d = profile["U"]
+    v_d = profile["V"]
+    sp_d = profile["presf"]
+    thl_d = profile["THL"]
+    qt_d = profile["QT"]
+    ql_d = profile["QL"]
+    ql_ice_d = profile["QL_ice"]
+    ql_water_d = profile["QL_water"]
+    qr_d = profile["QR"]
+    A_d = profile["A"] 
+
     # dales state
     # dales.cdf.variables['presh'][gcm.step] = dales.get_presh().value_in(units.Pa) # todo associate with zh in netcdf
-
     # calculate real temperature from Dales' thl, qt, using the pressures from openIFS
     pf = sputils.interp(h, Zf[::-1], Pf[::-1])
     t = thl_d * sputils.exner(pf) + sputils.rlv * ql_d / sputils.cp
-
     # get real temperature from Dales - note it is calculated internally from thl and ql
     t_d = les.get_profile_T()
-
     if write:
         spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
                             v=v_d.value_in(units.m / units.s),
@@ -411,10 +410,9 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
                             t=t.value_in(units.K),
                             t_=t_d.value_in(units.K),
                             qr=qr_d.value_in(units.mfu))
-
+    
     # forcing
     ft = gcm.get_timestep()  # should be the length of the NEXT time step
-
     # interpolate to GCM heights
     t_d = sputils.interp(Zf, h, t_d)
     qt_d = sputils.interp(Zf, h, qt_d)
@@ -447,7 +445,7 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
     f_U[0:start_index] *= 0
     f_V[0:start_index] *= 0
     f_A[0:start_index] *= 0
-
+    
     # careful with double coriolis
     gcm.set_profile_tendency("U", les.grid_index, f_U)
     gcm.set_profile_tendency("V", les.grid_index, f_V)
@@ -469,7 +467,6 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
                             f_QI=f_QI.value_in(units.mfu/units.s),
                             f_A=f_A.value_in(units.ccu/units.s)
         )
-
 # sets GCM forcings using values from the spifs.nc file
 # not used - was thught to be necessary for restarts, but it isn't
 def set_gcm_tendencies_from_file(gcm, les):
@@ -611,3 +608,25 @@ def variability_nudge(les, gcm, write=True):
     if write:
         spio.write_les_data(les, qt_alpha=alpha.value_in(1 / units.s))
         spio.write_les_data(les, qt_beta=beta, qt_std=qt_std.value_in(units.mfu))
+
+
+
+def get_les_profiles(les,async):
+
+    h = les.get_zf(return_request=async)
+    u_d = les.get_profile_U(return_request=async)
+    v_d = les.get_profile_V(return_request=async)
+    sp_d = les.get_presf(return_request=async)
+    thl_d = les.get_profile_THL(return_request=async)
+    qt_d = les.get_profile_QT(return_request=async)
+    ql_d = les.get_profile_QL(return_request=async)
+    ql_ice_d = les.get_profile_QL_ice(return_request=async)  # ql_ice is the ice part of QL
+    ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
+    qr_d = les.get_profile_QR(return_request=async)
+    Zh = les.gcm_Zh
+    zh = les.zh_cache
+    # construct a mapping of indices between openIFS levels and Dales height levels
+    indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
+     # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
+    A = les.get_cloudfraction(indices,return_request=async)[::-1]  # reverse order
+    return {"zf": h, "U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d, "QL_water": ql_water_d, "QR": qr_d, "A": A} 
