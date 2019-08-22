@@ -95,7 +95,6 @@ def save_dryrun_info(lons, lats):
 # Initializes the system
 def initialize(config, geometries, output_geometries=None):
     global gcm_model, les_models, output_name, async_evolve, output_column_indices, output_columns
-
     read_config(config)
 
     if not restart and os.path.exists(output_dir):
@@ -263,7 +262,7 @@ def open_timing_file():
 # do one gcm time step
 # step les until it catches up
 def step(work_queue=None):
-    global timing_file,firststep
+    global timing_file,firststep,profiles
     if not timing_file:
        open_timing_file()
 
@@ -271,7 +270,8 @@ def step(work_queue=None):
     # the first step seems to repeat the last step of the previous run.
     writeCDF = (not(restart and firststep))
 
-    
+    if firststep:
+        profile={}
     t = gcm_model.get_model_time()
     delta_t = gcm_model.get_timestep()
     
@@ -312,20 +312,23 @@ def step(work_queue=None):
 
 
     set_les_forcings_walltime = -time.time()
+    #pool = AsyncRequestsPool()
     for les in les_models:
-        spcpl.set_les_forcings(les, gcm_model, dt_gcm=delta_t, factor=les_forcing_factor,
-                               couple_surface=cplsurf, qt_forcing=qt_forcing, write=writeCDF)
+        if not firststep:
+            profile=profiles[les]
+        req=spcpl.set_les_forcings(les, gcm_model,True, firststep, profile, dt_gcm=delta_t, factor=les_forcing_factor, couple_surface=cplsurf, qt_forcing=qt_forcing, write=writeCDF)
+    #    for r in req.values():
+    #        pool.add_request(r)
+    #pool.waitall()    
     set_les_forcings_walltime += time.time()
-        
     # step les models to the end time of the current GCM step = t + delta_t
     les_wall_times, profiles = step_les_models(t + delta_t, work_queue, offset=les_spinup)
-
     set_gcm_tendencies_walltime = -time.time()
     # get les state - for forcing on OpenIFS and les stats
     for les in les_models:
+        profile=profiles[les]
         spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les], factor=gcm_forcing_factor, write=writeCDF)
     set_gcm_tendencies_walltime += time.time()
-        
     gcm_walltime2 = -time.time()
     gcm_model.evolve_model_from_cloud_scheme()
     gcm_walltime2 += time.time()
@@ -348,12 +351,15 @@ def step(work_queue=None):
 
 # Initialization function
 def step_spinup(les_list, work_queue, gcm, spinup_length):
-    global timing_file, firststep
+    global timing_file, firststep,profiles
 
     if not any(les_list): return
 
     if not timing_file:
         open_timing_file()
+    
+    if firststep:
+        profile={}
 
     if not firststep:
         # in the very first step, this has already been done in the initialization
@@ -364,16 +370,21 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
     t_les = les_list[0].get_model_time()
 
     set_les_forcings_walltime = -time.time()
+    #pool = AsyncRequestsPool()
     for les in les_list:
-        spcpl.set_les_forcings(les, gcm, dt_gcm=spinup_length| units.s, factor=les_spinup_forcing_factor,
-                               couple_surface=cplsurf, qt_forcing=qt_forcing)
+	if not firststep:
+	    profile=profiles[les]
+        req=spcpl.set_les_forcings(les, gcm, True,firststep, profile, dt_gcm=spinup_length| units.s, factor=les_spinup_forcing_factor, couple_surface=cplsurf, qt_forcing=qt_forcing)
+    #    for r in req.values():
+    #        pool.add_request(r)
+    #pool.waitall()
     set_les_forcings_walltime += time.time()
         
     # step les models
     les_wall_times , profiles = step_les_models(t_les + (spinup_length | units.s), work_queue, offset=0)
-
     set_gcm_tendencies_walltime = -time.time() # assign the profile writing time to the same slot as setting gcm tendencies
     for les in les_list:
+        profile=profiles[les]
         spcpl.write_les_profiles(les)
     set_gcm_tendencies_walltime += time.time()
 

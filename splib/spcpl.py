@@ -8,7 +8,7 @@ import sputils
 import spio
 import sys
 from scipy.optimize import brentq
-
+from amuse.rfi.async_request import AsyncRequestsPool
 # ~ from brent import brentq
 
 # Logger
@@ -288,17 +288,23 @@ def set_les_state(les, u, v, thl, qt, ps=None):
 
 # Computes and applies the forcings to the les model before time stepping,
 # relaxing it toward the gcm mean state.
-def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', write=True):
+def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_surface, qt_forcing='sp', write=True):
     u, v, thl, qt, ps, ql = convert_profiles(les)
-
     # get dales slab averages
-    u_d = les.get_profile_U()
-    v_d = les.get_profile_V()
-    thl_d = les.get_profile_THL()
-    qt_d = les.get_profile_QT()
-    ql_d = les.get_profile_QL()
-    ps_d = les.get_surface_pressure()
-
+    if firststep:
+        u_d = les.get_profile_U()
+        v_d = les.get_profile_V()
+        thl_d = les.get_profile_THL()
+        qt_d = les.get_profile_QT()
+        ql_d = les.get_profile_QL()
+        ps_d = les.get_surface_pressure()
+    else:
+        u_d = profile["U"]
+        v_d = profile["V"]
+        thl_d = profile["THL"]
+        qt_d = profile["QT"]
+        ql_d = profile["QL"]
+        ps_d = profile["PS"]
     try:
         rain_last = les.rain
     except:
@@ -306,7 +312,6 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
     rain = les.get_rain()
     les.rain = rain
     rainrate = (rain - rain_last) / dt_gcm
-
     # ft = dt  # forcing time constant
 
     # forcing
@@ -316,14 +321,23 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
     f_qt = factor * (qt - qt_d) / dt_gcm
     f_ps = factor * (ps - ps_d) / dt_gcm
     f_ql = factor * (ql - ql_d) / dt_gcm
-
     # log.info("RMS forcings at %d during time step" % les.grid_index)
     # dt_gcm = gcm.get_timestep().value_in(units.s)
     # log.info("  u  : %f" % (sputils.rms(f_u)*dt_gcm))
     # log.info("  v  : %f" % (sputils.rms(f_v)*dt_gcm))
     # log.info("  thl: %f" % (sputils.rms(f_thl)*dt_gcm))
     # log.info("  qt : %f" % (sputils.rms(f_qt)*dt_gcm))
-
+    # set tendencies for Dales
+    u_t=les.set_tendency_U(f_u,return_request=async)
+    v_t=les.set_tendency_V(f_v,return_request=async)
+    thl_t=les.set_tendency_THL(f_thl,return_request=async)
+    qt_t=les.set_tendency_QT(f_qt,return_request=async)
+    sp_t=les.set_tendency_surface_pressure(f_ps,return_request=async)
+    ql_t=les.set_tendency_QL(f_ql,return_request=async)  # used in experimental local qt nudging
+    ql_p_t=les.set_ref_profile_QL(ql,return_request=async)  # used in experimental variability nudging
+    les.ql_ref = ql  # store ql profile from GCM, interpolated to the LES level
+    # for another variant of variability nudging
+    # transfer surface quantities
     # store forcings on dales in the statistics
     if write:
         spio.write_les_data(les, f_u=f_u.value_in(units.m / units.s ** 2),
@@ -333,25 +347,12 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
                             rain=rain.value_in(units.kg / units.m ** 2),
                             rainrate=rainrate.value_in(units.kg / units.m ** 2 / units.s) * 3600)
 
-    # set tendencies for Dales
-    les.set_tendency_U(f_u)
-    les.set_tendency_V(f_v)
-    les.set_tendency_THL(f_thl)
-    les.set_tendency_QT(f_qt)
-    les.set_tendency_surface_pressure(f_ps)
-    les.set_tendency_QL(f_ql)  # used in experimental local qt nudging
-    les.set_ref_profile_QL(ql)  # used in experimental variability nudging
-
-    les.ql_ref = ql  # store ql profile from GCM, interpolated to the LES levels
-    # for another variant of variability nudging
-
-    # transfer surface quantities
     if couple_surface:
         z0m, z0h, wt, wq = convert_surface_fluxes(les)
-        les.set_z0m_surf(z0m)
-        les.set_z0h_surf(z0h)
-        les.set_wt_surf(wt)
-        les.set_wq_surf(wq)
+        z0m_surf=les.set_z0m_surf(z0m, return_request=async)
+        z0h_surf=les.set_z0h_surf(z0h, return_request=async)
+        wt_surf=les.set_wt_surf(wt, return_request=async)
+        wq_surf=les.set_wq_surf(wq, return_request=async)
         if write:
             spio.write_les_data(les,
                                 z0m=z0m.value_in(units.m),
@@ -372,8 +373,7 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
             variability_nudge(les, gcm)
             walltime = time.time() - starttime
             log.info("variability nudge took %6.2f s" % walltime)
-
-
+    return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t, "Z0M_surf":z0m_surf, "Z0H_surf":z0h_surf, "WT_surf":wt_surf, "WQ_surf":wq_surf}
 # Computes the LES tendencies upon the GCM:
 def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
@@ -390,7 +390,6 @@ def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     ql_water_d = profile["QL_water"]
     qr_d = profile["QR"]
     A_d = profile["A"] 
-
     # dales state
     # dales.cdf.variables['presh'][gcm.step] = dales.get_presh().value_in(units.Pa) # todo associate with zh in netcdf
     # calculate real temperature from Dales' thl, qt, using the pressures from openIFS
@@ -612,7 +611,6 @@ def variability_nudge(les, gcm, write=True):
 
 
 def get_les_profiles(les,async):
-
     h = les.get_zf(return_request=async)
     u_d = les.get_profile_U(return_request=async)
     v_d = les.get_profile_V(return_request=async)
@@ -623,10 +621,11 @@ def get_les_profiles(les,async):
     ql_ice_d = les.get_profile_QL_ice(return_request=async)  # ql_ice is the ice part of QL
     ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
     qr_d = les.get_profile_QR(return_request=async)
+    ps_d = les.get_surface_pressure(return_request=async)
+    # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     Zh = les.gcm_Zh
     zh = les.zh_cache
     # construct a mapping of indices between openIFS levels and Dales height levels
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
-     # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     A = les.get_cloudfraction(indices,return_request=async)[::-1]  # reverse order
-    return {"zf": h, "U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d, "QL_water": ql_water_d, "QR": qr_d, "A": A} 
+    return {"zf": h, "U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d, "QL_water": ql_water_d, "QR": qr_d, "PS": ps_d, "A": A} 
