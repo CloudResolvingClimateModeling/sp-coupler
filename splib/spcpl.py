@@ -387,9 +387,10 @@ def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     qt_d = profile["QT"]
     ql_d = profile["QL"]
     ql_ice_d = profile["QL_ice"]
-    ql_water_d = profile["QL_water"]
+    #ql_water_d = profile["QL_water"]
+    ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
     qr_d = profile["QR"]
-    A_d = profile["A"] 
+    A_d = profile["A"][::-1] 
     # dales state
     # dales.cdf.variables['presh'][gcm.step] = dales.get_presh().value_in(units.Pa) # todo associate with zh in netcdf
     # calculate real temperature from Dales' thl, qt, using the pressures from openIFS
@@ -619,7 +620,6 @@ def get_les_profiles(les,async):
     qt_d = les.get_profile_QT(return_request=async)
     ql_d = les.get_profile_QL(return_request=async)
     ql_ice_d = les.get_profile_QL_ice(return_request=async)  # ql_ice is the ice part of QL
-    ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
     qr_d = les.get_profile_QR(return_request=async)
     ps_d = les.get_surface_pressure(return_request=async)
     # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
@@ -627,5 +627,5 @@ def get_les_profiles(les,async):
     zh = les.zh_cache
     # construct a mapping of indices between openIFS levels and Dales height levels
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
-    A = les.get_cloudfraction(indices,return_request=async)[::-1]  # reverse order
-    return {"zf": h, "U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d, "QL_water": ql_water_d, "QR": qr_d, "PS": ps_d, "A": A} 
+    A = les.get_cloudfraction(indices,return_request=async) #[::-1]  # reverse order
+    return {"zf": h, "U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d,  "QR": qr_d, "PS": ps_d, "A": A} 
