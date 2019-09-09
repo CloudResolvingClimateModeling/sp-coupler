@@ -311,14 +311,14 @@ def step(work_queue=None):
     gather_gcm_data_walltime += time.time()
 
     set_les_forcings_walltime = -time.time()
-    #pool = AsyncRequestsPool()
+    pool = AsyncRequestsPool()
     for les in les_models:
         if not firststep:
             profile=profiles[les]
         req=spcpl.set_les_forcings(les, gcm_model,True, firststep, profile, dt_gcm=delta_t, factor=les_forcing_factor, couple_surface=cplsurf, qt_forcing=qt_forcing, write=writeCDF)
-        #for r in req.values():
-        #    pool.add_request(r)
-    #pool.waitall()
+        for r in req.values():
+            pool.add_request(r)
+    pool.waitall()
     set_les_forcings_walltime += time.time()
     # step les models to the end time of the current GCM step = t + delta_t
     les_wall_times, profiles = step_les_models(t + delta_t, work_queue, offset=les_spinup)

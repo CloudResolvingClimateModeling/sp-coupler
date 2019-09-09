@@ -372,7 +372,9 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
             variability_nudge(les, gcm)
             walltime = time.time() - starttime
             log.info("variability nudge took %6.2f s" % walltime)
-    return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t, "Z0M_surf":z0m_surf, "Z0H_surf":z0h_surf, "WT_surf":wt_surf, "WQ_surf":wq_surf}
+    if couple_surface:
+        return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t, "Z0M_surf":z0m_surf, "Z0H_surf":z0h_surf, "WT_surf":wt_surf, "WQ_surf":wq_surf}
+    return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t} 
 
 # Computes the LES tendencies upon the GCM:
 def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
