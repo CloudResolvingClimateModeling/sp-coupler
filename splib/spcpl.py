@@ -17,6 +17,66 @@ log = logging.getLogger(__name__)
 
 # Superparametrization coupling methods
 
+def integral (a, b, z, q):
+    """
+    Calculate the integral from a to b of the piece-wise constant function q(z).
+    q(z) has the value q[i] on the interval from z[i] to z[i+1].
+    
+    Appropriate for integrating finite-volume quantities.
+
+
+    Parameters
+    ----------
+    a, b : interval end points
+    z : increasing array of point coordinates
+    q : array of function values (length one less than z)
+
+    
+    """
+    if len(z) != len(q) + 1:
+        print("len(z) should be len(q) + 1")
+    if a < z[0] or a > z[-1] or b < z[0] or b > z[-1]:
+        print("integral: Interval end point outside range.")
+        return None
+
+    sign = 1
+    if a > b:
+        sign = -1
+        a,b = b,a
+
+    ia = 0; ib = 0
+    while z[ia+1] < a:
+        ia += 1
+    while z[ib+1] < b:
+        ib += 1
+
+    # z[ia] <= a <= z[ia+1]   and   a <= b
+    # z[ib] <= b <= z[ib+1]
+    
+        
+    #print("integral: a=%f, ia=%d, z[ia],z[ia+1] = %f, %f"%(a, ia, z[ia], z[ia+1]))
+    #print("integral: b=%f, ib=%d, z[ib],z[ib+1] = %f, %f"%(b, ib, z[ib], z[ib+1]))
+
+
+    # sum intervals, including the full edge intervals
+    #S = 0
+    #for i in range(ia, ib+1):
+    #    S += q[i] * (z[i+1]-z[i])
+
+    # numpy version - sum intervals, including the full edge intervals
+    S = (q[ia:ib+1] * (z[ia+1:ib+2] - z[ia:ib+1])).sum() 
+        
+    # subtract edge intervals
+    Sa = q[ia] * (a - z[ia])
+    Sb = q[ib] * (z[ib+1] - b)
+
+    #print("integral: sum: %f"%S)
+    #print("integral: a-part: %f"%Sa)
+    #print("integral: b-part: %f"%Sb)
+    #print("integral: total %f"%((S - Sa - Sb)*sign))
+    return (S - Sa - Sb) * sign
+
+
 # Retrieves the les model cloud fraction
 def get_cloud_fraction(les):
     Zh = les.gcm_Zh
@@ -28,7 +88,7 @@ def get_cloud_fraction(les):
     return A
 
 
-gcm_vars = ["U", "V", "T", "SH", "QL", "QI", "Pfull", "Phalf", "A"]
+gcm_vars = ["U", "V", "T", "SH", "QL", "QI", "Pfull", "Phalf", "A", "Zgfull", "Zghalf"]
 surf_vars = ["Z0M", "Z0H", "QLflux", "QIflux", "SHflux", "TLflux", "TSflux"]
 cpl_units = {"U": units.m / units.s,
              "V": units.m / units.s,
@@ -168,29 +228,45 @@ def convert_surface_fluxes(les):
 
 # get the OpenIFS state and convert to LES quantities
 def convert_profiles(les, write=True):
-    U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
+    U, V, T, SH, QL, QI, Pf, Ph, A, Zgfull, Zghalf = (getattr(les, varname, None) for varname in gcm_vars)
 
     # virtual temperature - used to get heights
     c = sputils.rv / sputils.rd - 1  # epsilon^(-1) -1  = 0.61
     Tv = T * (1 + c * SH - (QL + QI))
     # is it correct to include QI here?
     # like liquid water, ice contributes to the density but not (much) to pressure
-    dP = Ph[1:] - Ph[:-1]  # dP - pressure difference over one cell
-    dZ = sputils.rd * Tv / (sputils.grav * Pf) * dP  # dZ - height of one cell
+
+    # dP = Ph[1:] - Ph[:-1]  # dP - pressure difference over one cell
+    # dZ = sputils.rd * Tv / (sputils.grav * Pf) * dP  # dZ - height of one cell
 
     # sum up dZ to get Z at half-levels.
     # 0 is at the end of the list, therefore reverse lists before and after.
-    Zh = numpy.cumsum(dZ[::-1])[::-1]
+    # Zh_local = numpy.cumsum(dZ[::-1])[::-1]
 
-    Zh.append(0 | units.m)  # append a 0 for ground
+    # Zh_local.append(0 | units.m)  # append a 0 for ground
 
     # height of full levels - simply average half levels (for now)
     # better: use full level pressure to calculate height?
-    Zf = (Zh[1:] + Zh[:-1]) * .5
+    # Zf_local = (Zh[1:] + Zh[:-1]) * .5
 
+
+    # use Zgfull, Zghalf from IFS directly instead of calculating from pressure
+    # these values seem close to what we used before.
+    # 2% difference at top, 0.2% difference close to ground.
+    Zh = (Zghalf-Zghalf[-1])/sputils.grav
+    Zf = (Zgfull-Zghalf[-1])/sputils.grav
+    
     les.gcm_Zf = Zf  # save height levels in the les object for re-use
     les.gcm_Zh = Zh
 
+    #print ('Zf ', Zf[-5:])
+    #print ('Zf_local', Zf_local[-5:])
+    #print ('Zh ', Zh[-5:])
+    #print ('Zh_local', Zh_local[-5:])
+    #print ('Zf relative diff\n', (Zf_local-Zf)/Zf)
+    #print ('Zh relative diff\n', (Zh_local[:-1]-Zh[:-1])/Zh[:-1])
+    
+    
     # Convert from OpenIFS quantities to les
     # note - different from modtestbed - iexner multiplied with both terms
     # could include QI as well.
@@ -235,21 +311,9 @@ def output_column_conversion(profile):
     c = sputils.rv / sputils.rd - 1  # epsilon^(-1) -1  = 0.61
     profile['Tv'] = profile['T'] * (1 + c * profile['SH'] - (profile['QL'] + profile['QI']))
 
-    dP = profile['Ph'][1:] - profile['Ph'][:-1]  # dP - pressure difference over one cell
-    dZ = sputils.rd * profile['Tv'] / (sputils.grav * profile['Pf']) * dP  # dZ - height of one cell
-
-    # sum up dZ to get Z at half-levels.
-    # 0 is at the end of the list, therefore reverse lists before and after.
-
-    # Zh = numpy.cumsum(dZ[::-1])[::-1]
-    # Zh = numpy.append(Zh, 0)  # append a 0 for ground
-
-    Zh = dZ[::-1].cumsum()[::-1]
-    Zh.append(0 | units.m)  # append a 0 for ground
-
-    # height of full levels - simply average half levels (for now)
-    # better: use full level pressure to calculate height?
-    Zf = (Zh[1:] + Zh[:-1]) * .5
+    Zh = (Zghalf-Zghalf[-1])/sputils.grav
+    Zf = (Zgfull-Zghalf[-1])/sputils.grav
+    
     profile['Zh'] = Zh[1:]
     profile['Zf'] = Zf[:]
     profile['Psurf'] = profile['Ph'][-1]
@@ -403,6 +467,8 @@ def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
         spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
                             v=v_d.value_in(units.m / units.s),
                             presf=sp_d.value_in(units.Pa),
+                            rhof=rhof_d.value_in(units.kg / units.m**3),
+                            rhobf=rhobf_d.value_in(units.kg / units.m**3),
                             qt=qt_d.value_in(units.mfu),
                             ql=ql_d.value_in(units.mfu),
                             ql_ice=ql_ice_d.value_in(units.mfu),
@@ -412,7 +478,7 @@ def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
                             t_=t_d.value_in(units.K),
                             qr=qr_d.value_in(units.mfu))
     # forcing
-    ft = dt_gcm # moved to outside loop, double calculation in splib - as probably timestep will be different after second half step gcm.get_timestep()  # should be the length of the NEXT time step
+    ft = dt_gcm 
     # interpolate to GCM heights
     t_d = sputils.interp(Zf, h, t_d)
     qt_d = sputils.interp(Zf, h, qt_d)
@@ -466,6 +532,7 @@ def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
     f_A[0:start_index] *= 0
     # careful with double coriolis
     gcm.set_profile_tendency("U", les.grid_index, f_U)
+
     gcm.set_profile_tendency("V", les.grid_index, f_V)
     gcm.set_profile_tendency("T", les.grid_index, f_T)
     gcm.set_profile_tendency("SH", les.grid_index, f_SH)
@@ -504,7 +571,7 @@ def set_gcm_tendencies_from_file(gcm, les):
 
 # fetch LES profiles and write to spifs.nc - used during spinup
 def write_les_profiles(les):
-    U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
+    U, V, T, SH, QL, QI, Pf, Ph, A, Zgfull, Zghalf = (getattr(les, varname, None) for varname in gcm_vars)
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
     h = les.zf_cache

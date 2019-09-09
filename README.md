@@ -4,7 +4,7 @@
 
 This repository contains a script for running the global atmospheric model [OpenIFS](https://confluence.ecmwf.int/display/OIFS/OpenIFS+Home)
 coupled to local cloud-resolving LES simulations. The LES used is [DALES](https://github.com/dalesteam/dales),
-the Dutch Atmospheric Large Eddy Simulation.
+the Dutch Atmospheric Large Eddy Simulation. Interfaces to the models are built with [OMUSE](https://bitbucket.org/omuse/omuse/src/default/)
 
 
 ## Authors
@@ -12,8 +12,15 @@ the Dutch Atmospheric Large Eddy Simulation.
 Fredrik Jansson (CWI, Amsterdam),
 Gijs van den Oord (Netherlands e-Science center, Amsterdam),
 Inti Pelupessy (Netherlands e-Science center, Amsterdam),
+Maria Chertova (Netherlands e-Science center, Amsterdam),
 Pier Siebesma (TU Delft and KNMI),
 Daan Crommelin (CWI, Amsterdam),
+
+## License
+
+The code in this repository is available under the Apache 2.0 license.
+
+DALES and OpenIFS have their own licenses.
 
 
 ## Singularity image
@@ -145,9 +152,194 @@ to run the main driver script in this repo, spmaster.py. To view all the superpa
 ./spmaster.py --help
 ```
 
-## License
+# Installation notes for specific systems
 
-The code in this repository is available under the Apache 2.0 license.
+## Installation on Arch Linux
 
-DALES and OpenIFS have their own licenses.
+When configuring OMUSE, one must explicitly specify python2, since the default is python3.
+
+```
+cd amuse
+PYTHON=python2 ./configure --with-netcdf=/usr/
+make framework
+
+export DOWNLOAD_CODES=all
+
+cd src/omuse/community/dales
+make
+
+cd ../oifs
+make
+```
+
+## Installation on Fedora
+
+Fedora's netcdf require some extra settings, becuse the module files
+and .inc files are in different places. We specify the module path
+with FCFLAGS: Another issue seen on Fedora is that make in the dales
+directory fails with `build.py: error: No module named
+dalesreader`. One solution is to add . to PYTHONPATH. This seems to confuse mercurial though.
+
+
+```
+FCFLAGS=-I/usr/lib64/gfortran/modules ./configure --with-netcdf=/usr
+make framework
+
+export DOWNLOAD_CODES=all
+
+export PYTHONPATH=$PYTHONPATH:.  # for dalesreader to be found when creating the interface code
+cd src/omuse/community/dales
+make
+
+cd ../oifs
+make
+```
+
+
+## Installation on ECMWF Cray system
+
+
+### Initial setup
+
+#### Load modules
+```
+prgenvswitchto intel
+
+module load python/2.7.12-01
+module load netcdf4/4.4.1
+module load cmake/3.12.0
+module load git
+module load eccodes
+```
+
+#### Other settings
+```
+# https proxy
+export https_proxy=proxy:2222
+
+export AMUSE=$PERM/amuse
+export PYTHONPATH=$PYTHONPATH:$AMUSE/src/
+
+source $PERM/meteo/bin/activate
+
+# OpenIFS compilation options
+export OIFS_COMP=intel
+export OIFS_BUILD=craynomp
+
+# Cray setup: all compilers are invoked with these names:
+export OIFS_FC=ftn
+export OIFS_CC=cc
+
+export OIFS_GRIB_API_DIR=$ECCODES_DIR
+export OIFS_GRIB_API_LIB="-L $ECCODES_LIB_DIR -leccodes_f90 -leccodes"
+export OIFS_GRIB_API_INCLUDE="-I $ECCODES_INCLUDE_DIR"
+
+export FCFLAGS="-convert big_endian"
+
+# On the Cray, we don't want any linking flags for Lapack
+# they are included when using the Cray compiler wrappers
+export OIFS_LAPACK_LIB=" "
+
+# DALES compilation options
+export SYST=ECMWF-intel
+export DALES_FCFLAGS="-g -traceback -O3 -r8 -xHost -fpp"
+#these flags apply to the interface only
+
+```
+
+
+#### virtual Python environment
+
+```
+pip install --user virtualenv
+PATH=$PATH:~/.local/bin/
+
+cd $PERM
+virtualenv meteo
+source $PERM/meteo/bin/activate
+pip install --upgrade mercurial moviepy f90nml numpy scipy matplotlib nose h5py docutils netCDF4 shapely psutil
+```                     
+
+#### mpi4py on ECMWF
+
+Since mid-2018 the mpi4py installed with the python modules at ECMWF no longer works. It can be installed manually from source.
+This should be done with the same set of compilers and modules loaded as used for everything else.
+
+* activate the virtual python environment, and with the intel compiler and our modules loaded.
+```
+cd $PERM
+wget https://bitbucket.org/mpi4py/mpi4py/downloads/mpi4py-3.0.0.tar.gz -O mpi4py-3.0.0.tar.gz
+tar zxf mpi4py-3.0.0.tar.gz
+cd mpi4py-3.0.0
+
+# add an enry for the Cray system in mpi.cfg
+cat >> mpi.cfg <<EOF
+[cray]
+mpicc = cc
+mpicxx = CC
+extra_link_args = -shared
+EOF
+
+python setup.py build --mpi=cray
+python setup.py install 
+
+cd $PERM
+```
+
+##### Notes
+FJ tried to compile mpi4py with the gnu compiler (`prgenvswitchto gnu`). Compilation seemed OK, but python segfaulted when testing the coupled system. Compiling mpi4py with the intel compiler seems to work - no module changes needed.
+
+[Source for mpi4py instructions](http://jaist-hpc.blogspot.com/2015/02/mpi4py.html)
+
+### Amuse
+
+```
+git clone https://github.com/fjansson/amuse
+cd amuse
+git checkout spawnless
+```
+
+This version is our own no-spawn fork for use at ECMWF. Elsewhere, the official amuse can be used:
+<https://github.com/amusecode/amuse/> .
+
+  
+```
+#make AMUSE find the right python:
+export PYTHON=python
+
+./configure FC=ftn CC=cc --with-netcdf=`nc-config --prefix`
+# some libraries will not be found, e.g. gsl. This is OK 
+
+make framework
+```
+
+### OMUSE
+
+```
+cd $PERM/amuse/src
+hg clone --insecure https://bitbucket.org/omuse/omuse
+cd omuse
+hg checkout meteo  # note: this step will be dropped, meteo will be merged into master
+```
+
+### OpenIFS and DALES
+OpenIFS and DALES can be cloned using the OMUSE make file.
+
+```
+export DOWNLOAD_CODES=all
+# DOWNLOAD_CODES=all will checkout entire repo with ssh, intended for developers of the components.
+# DOWNLOAD_CODES=latest will (shallow) checkout latest revision only
+# DOWNLOAD_CODES=<anything else> will (shallow) checkout release tag spifs_v1.0.0
+```
+
+```
+cd community/dales
+make
+cd ../..
+
+cd community/oifs
+make
+# note: this downloads OpenIFS, which requires ECMWF credentials
+
+```
 
