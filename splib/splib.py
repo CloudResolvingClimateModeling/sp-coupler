@@ -149,6 +149,7 @@ def initialize(config, geometries, output_geometries=None):
         les.grid_index = i
         les.lat, les.lon = lats[i], lons[i]
         les.zh_cache = les.get_zh()
+        les.zf_cache = les.get_zf()
         les_models.append(les)
     
     spio.init_netcdf(output_name, gcm_model, les_models, startdate, output_columns, append=restart,
@@ -274,7 +275,6 @@ def step(work_queue=None):
         profile={}
     t = gcm_model.get_model_time()
     delta_t = gcm_model.get_timestep()
-    
     log.info("gcm time at start of timestep is %s" % str(t))
     # want this message before the time stepping
     # until_cloud_scheme and cloud_scheme below do not change the model time
@@ -303,13 +303,12 @@ def step(work_queue=None):
 
     gcm_walltime1 += time.time()
     gcm_model.step += 1
+    delta_t=gcm_model.get_timestep() #probably don't have to calculate it one more time but this is the next gcm step...
 
     
     gather_gcm_data_walltime = -time.time()
     spcpl.gather_gcm_data(gcm_model, les_models, cplsurf, output_column_indices, write=writeCDF)
     gather_gcm_data_walltime += time.time()
-    
-
 
     set_les_forcings_walltime = -time.time()
     #pool = AsyncRequestsPool()
@@ -317,17 +316,17 @@ def step(work_queue=None):
         if not firststep:
             profile=profiles[les]
         req=spcpl.set_les_forcings(les, gcm_model,True, firststep, profile, dt_gcm=delta_t, factor=les_forcing_factor, couple_surface=cplsurf, qt_forcing=qt_forcing, write=writeCDF)
-    #    for r in req.values():
-    #        pool.add_request(r)
-    #pool.waitall()    
+        #for r in req.values():
+        #    pool.add_request(r)
+    #pool.waitall()
     set_les_forcings_walltime += time.time()
     # step les models to the end time of the current GCM step = t + delta_t
     les_wall_times, profiles = step_les_models(t + delta_t, work_queue, offset=les_spinup)
-    set_gcm_tendencies_walltime = -time.time()
     # get les state - for forcing on OpenIFS and les stats
+    set_gcm_tendencies_walltime = -time.time()
     for les in les_models:
         profile=profiles[les]
-        spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les], factor=gcm_forcing_factor, write=writeCDF)
+        spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les],dt_gcm=delta_t, factor=gcm_forcing_factor, write=writeCDF)
     set_gcm_tendencies_walltime += time.time()
     gcm_walltime2 = -time.time()
     gcm_model.evolve_model_from_cloud_scheme()
@@ -370,14 +369,14 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
     t_les = les_list[0].get_model_time()
 
     set_les_forcings_walltime = -time.time()
-    #pool = AsyncRequestsPool()
+    pool = AsyncRequestsPool()
     for les in les_list:
 	if not firststep:
 	    profile=profiles[les]
         req=spcpl.set_les_forcings(les, gcm, True,firststep, profile, dt_gcm=spinup_length| units.s, factor=les_spinup_forcing_factor, couple_surface=cplsurf, qt_forcing=qt_forcing)
-    #    for r in req.values():
-    #        pool.add_request(r)
-    #pool.waitall()
+        for r in req.values():
+            pool.add_request(r)
+    pool.waitall()
     set_les_forcings_walltime += time.time()
         
     # step les models
@@ -560,27 +559,26 @@ def step_les_models(model_time, work_queue, offset=les_spinup):
             reqs = []
             profile_reqs={}
             pool = AsyncRequestsPool()
-            for les in les_models:
+	    for les in les_models:
                req=les.evolve_model.asynchronous(model_time + (offset | units.s), exactEnd=True)
 	       reqs.append(req)
                pool.add_request(req)
                profiles=spcpl.get_les_profiles(les, True)
                profile_reqs[les] = profiles
-               for r in profiles.values():
+	       for r in profiles.values():
                    pool.add_request(r)
             # now while the dales threads are working, sync the netcdf to disk
             spio.sync_root()
-            # wait for all threads
+	    # wait for all threads
             #return pool, requests
             pool.waitall()
-	    for les, prof in profile_reqs.items():
+            for les, prof in profile_reqs.items():
                 les_profiles[les] = {v : r.result() for v,r in prof.items()}
             try:
                 les_wall_times = [r.result().value_in(units.s) for r in reqs]
                 log.info("async step_les_models() done. Elapsed times:" + str(['%5.1f' % t for t in les_wall_times]))
             except Exception as e:
                 log.error("Exception caught while gathering results: %s" % e.message)
-
     else:  # sequential version
         for les in les_models:
             walltime=step_les(les, model_time, offset)

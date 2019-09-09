@@ -202,7 +202,7 @@ def convert_profiles(les, write=True):
     #   Zf must be increasing, so reverse the gcm arrays
     #   outside the range of Zf, interp returns the first or the last point of the range
 
-    h = les.get_zf()
+    h = les.zf_cache
 
     thl = sputils.interp(h, Zf[::-1], thl_[::-1])
     qt = sputils.interp(h, Zf[::-1], qt_[::-1])
@@ -309,11 +309,13 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
         rain_last = les.rain
     except:
         rain_last = 0 | units.kg / units.m ** 2
-    rain = les.get_rain()
+    if firststep:
+        rain = les.get_rain()
+    else:
+        rain = profile["Rain"] #les.get_rain()
     les.rain = rain
     rainrate = (rain - rain_last) / dt_gcm
     # ft = dt  # forcing time constant
-
     # forcing
     f_u = factor * (u - u_d) / dt_gcm
     f_v = factor * (v - v_d) / dt_gcm
@@ -346,7 +348,6 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
                             f_qt=f_qt.value_in(units.mfu / units.s),
                             rain=rain.value_in(units.kg / units.m ** 2),
                             rainrate=rainrate.value_in(units.kg / units.m ** 2 / units.s) * 3600)
-
     if couple_surface:
         z0m, z0h, wt, wq = convert_surface_fluxes(les)
         z0m_surf=les.set_z0m_surf(z0m, return_request=async)
@@ -359,14 +360,12 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
                                 z0h=z0h.value_in(units.m),
                                 wthl=wt.value_in(units.m * units.s ** -1 * units.K),
                                 wqt=wq.value_in(units.m / units.s))
-
             spio.write_les_data(les,
                                 TLflux=les.TLflux.value_in(units.W / units.m ** 2),
                                 TSflux=les.TSflux.value_in(units.W / units.m ** 2),
                                 SHflux=les.SHflux.value_in(units.kg / units.m ** 2 / units.s),
                                 QLflux=les.QLflux.value_in(units.kg / units.m ** 2 / units.s),
                                 QIflux=les.QIflux.value_in(units.kg / units.m ** 2 / units.s))
-
     if qt_forcing == 'variance':
         if les.get_model_time() > 0 | units.s:
             starttime = time.time()
@@ -374,12 +373,13 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
             walltime = time.time() - starttime
             log.info("variability nudge took %6.2f s" % walltime)
     return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t, "Z0M_surf":z0m_surf, "Z0H_surf":z0h_surf, "WT_surf":wt_surf, "WQ_surf":wq_surf}
+
 # Computes the LES tendencies upon the GCM:
-def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
+def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.    
-    h = profile["zf"]
+    Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.   
+    h = les.zf_cache
     u_d = profile["U"]
     v_d = profile["V"]
     sp_d = profile["presf"]
@@ -387,7 +387,6 @@ def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     qt_d = profile["QT"]
     ql_d = profile["QL"]
     ql_ice_d = profile["QL_ice"]
-    #ql_water_d = profile["QL_water"]
     ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
     qr_d = profile["QR"]
     A_d = profile["A"][::-1] 
@@ -397,7 +396,7 @@ def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     pf = sputils.interp(h, Zf[::-1], Pf[::-1])
     t = thl_d * sputils.exner(pf) + sputils.rlv * ql_d / sputils.cp
     # get real temperature from Dales - note it is calculated internally from thl and ql
-    t_d = les.get_profile_T()
+    t_d = profile["T"]
     if write:
         spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
                             v=v_d.value_in(units.m / units.s),
@@ -410,9 +409,8 @@ def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
                             t=t.value_in(units.K),
                             t_=t_d.value_in(units.K),
                             qr=qr_d.value_in(units.mfu))
-    
     # forcing
-    ft = gcm.get_timestep()  # should be the length of the NEXT time step
+    ft = dt_gcm # moved to outside loop, double calculation in splib - as probably timestep will be different after second half step gcm.get_timestep()  # should be the length of the NEXT time step
     # interpolate to GCM heights
     t_d = sputils.interp(Zf, h, t_d)
     qt_d = sputils.interp(Zf, h, qt_d)
@@ -421,11 +419,14 @@ def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     ql_ice_d = sputils.interp(Zf, h, ql_ice_d)
     u_d = sputils.interp(Zf, h, u_d)
     v_d = sputils.interp(Zf, h, v_d)
-
+   
     # log.info("Height of LES system: %f" % h[-1])
     # first index in the openIFS colum which is inside the Dales system
     start_index = sputils.searchsorted(-Zf, -h[-1])
-
+   
+    # log.info("Height of LES system: %f" % h[-1])
+    # first index in the openIFS colum which is inside the Dales system
+    start_index = sputils.searchsorted(-Zf, -h[-1])
     # log.info("start_index: %d" % start_index)
 
     f_T = factor * (t_d - T) / ft
@@ -443,9 +444,24 @@ def set_gcm_tendencies(gcm, les, profile, factor=1, write=True):
     f_QL[0:start_index] *= 0
     f_QI[0:start_index] *= 0
     f_U[0:start_index] *= 0
+    # log.info("start_index: %d" % start_index) 
+    
+    f_T = factor * (t_d - T) / ft
+    f_SH = factor * ((qt_d - ql_d) - SH) / ft  # !!!!! -ql_d here - SH is vapour only.
+    f_QL = factor * (ql_water_d - QL) / ft  # condensed liquid water
+    f_QI = factor * (ql_ice_d - QI) / ft  # condensed water as ice
+    # f_QL = factor * (ql_d - (QL+QI)) / ft dales QL is both liquid and ice - f_QL is liquid only. this conserves
+    # water mass but makes an error in latent heat.
+    f_U = factor * (u_d - U) / ft
+    f_V = factor * (v_d - V) / ft
+    f_A = factor * (A_d - A) / ft
+    f_T[0:start_index] *= 0  # zero out the forcings above the Dales system
+    f_SH[0:start_index] *= 0  # TODO : taper off smoothly instead
+    f_QL[0:start_index] *= 0
+    f_QI[0:start_index] *= 0
+    f_U[0:start_index] *= 0
     f_V[0:start_index] *= 0
     f_A[0:start_index] *= 0
-    
     # careful with double coriolis
     gcm.set_profile_tendency("U", les.grid_index, f_U)
     gcm.set_profile_tendency("V", les.grid_index, f_V)
@@ -489,7 +505,7 @@ def write_les_profiles(les):
     U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.get_zf()
+    h = les.zf_cache
     u_d = les.get_profile_U()
     v_d = les.get_profile_V()
     sp_d = les.get_presf()
@@ -612,7 +628,6 @@ def variability_nudge(les, gcm, write=True):
 
 
 def get_les_profiles(les,async):
-    h = les.get_zf(return_request=async)
     u_d = les.get_profile_U(return_request=async)
     v_d = les.get_profile_V(return_request=async)
     sp_d = les.get_presf(return_request=async)
@@ -622,10 +637,12 @@ def get_les_profiles(les,async):
     ql_ice_d = les.get_profile_QL_ice(return_request=async)  # ql_ice is the ice part of QL
     qr_d = les.get_profile_QR(return_request=async)
     ps_d = les.get_surface_pressure(return_request=async)
-    # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
+    t_d =  les.get_profile_T(return_request=async) 
+   # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     Zh = les.gcm_Zh
     zh = les.zh_cache
     # construct a mapping of indices between openIFS levels and Dales height levels
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
     A = les.get_cloudfraction(indices,return_request=async) #[::-1]  # reverse order
-    return {"zf": h, "U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d,  "QR": qr_d, "PS": ps_d, "A": A} 
+    rain = les.get_rain(return_request=async)
+    return {"U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d,  "QR": qr_d, "PS": ps_d,"T": t_d, "A": A, "Rain": rain} 
