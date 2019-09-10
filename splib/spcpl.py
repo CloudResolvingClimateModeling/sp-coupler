@@ -442,13 +442,15 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
 
 # Computes the LES tendencies upon the GCM:
 def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
-    U, V, T, SH, QL, QI, Pf, Ph, A = (getattr(les, varname, None) for varname in gcm_vars)
+    U, V, T, SH, QL, QI, Pf, Ph, A, Zgfull, Zghalf = (getattr(les, varname, None) for varname in gcm_vars)
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
     Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.   
     h = les.zf_cache
     u_d = profile["U"]
     v_d = profile["V"]
     sp_d = profile["presf"]
+    rhof_d = profile["Rhof"]
+    rhobf_d = profile["Rhobf"]
     thl_d = profile["THL"]
     qt_d = profile["QT"]
     ql_d = profile["QL"]
@@ -466,7 +468,7 @@ def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
     if write:
         spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
                             v=v_d.value_in(units.m / units.s),
-                            presf=sp_d.value_in(units.Pa),
+                            presf=sp_d.value_in(units.Pa),  
                             rhof=rhof_d.value_in(units.kg / units.m**3),
                             rhobf=rhobf_d.value_in(units.kg / units.m**3),
                             qt=qt_d.value_in(units.mfu),
@@ -700,6 +702,8 @@ def get_les_profiles(les,async):
     u_d = les.get_profile_U(return_request=async)
     v_d = les.get_profile_V(return_request=async)
     sp_d = les.get_presf(return_request=async)
+    rhof_d = les.get_rhof(return_request=async)
+    rhobf_d = les.get_rhobf(return_request=async)
     thl_d = les.get_profile_THL(return_request=async)
     qt_d = les.get_profile_QT(return_request=async)
     ql_d = les.get_profile_QL(return_request=async)
@@ -714,4 +718,4 @@ def get_les_profiles(les,async):
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
     A = les.get_cloudfraction(indices,return_request=async) #[::-1]  # reverse order
     rain = les.get_rain(return_request=async)
-    return {"U": u_d, "V": v_d, "presf": sp_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d,  "QR": qr_d, "PS": ps_d,"T": t_d, "A": A, "Rain": rain} 
+    return {"U": u_d, "V": v_d, "presf": sp_d,"Rhof": rhof_d,"Rhobf": rhobf_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d,  "QR": qr_d, "PS": ps_d,"T": t_d, "A": A, "Rain": rain} 
