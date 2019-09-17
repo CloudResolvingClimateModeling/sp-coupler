@@ -4,8 +4,8 @@ import time
 import numpy
 import logging
 from omuse.units import units
-import sputils
-import spio
+from . import sputils
+from . import spio
 import sys
 from scipy.optimize import brentq
 from amuse.rfi.async_request import AsyncRequestsPool
@@ -352,7 +352,7 @@ def set_les_state(les, u, v, thl, qt, ps=None):
 
 # Computes and applies the forcings to the les model before time stepping,
 # relaxing it toward the gcm mean state.
-def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_surface, qt_forcing='sp', write=True):
+def set_les_forcings(les, gcm, asynchronous, firststep, profile, dt_gcm, factor, couple_surface, qt_forcing='sp', write=True):
     u, v, thl, qt, ps, ql = convert_profiles(les)
     # get dales slab averages
     if firststep:
@@ -394,13 +394,13 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
     # log.info("  thl: %f" % (sputils.rms(f_thl)*dt_gcm))
     # log.info("  qt : %f" % (sputils.rms(f_qt)*dt_gcm))
     # set tendencies for Dales
-    u_t=les.set_tendency_U(f_u,return_request=async)
-    v_t=les.set_tendency_V(f_v,return_request=async)
-    thl_t=les.set_tendency_THL(f_thl,return_request=async)
-    qt_t=les.set_tendency_QT(f_qt,return_request=async)
-    sp_t=les.set_tendency_surface_pressure(f_ps,return_request=async)
-    ql_t=les.set_tendency_QL(f_ql,return_request=async)  # used in experimental local qt nudging
-    ql_p_t=les.set_ref_profile_QL(ql,return_request=async)  # used in experimental variability nudging
+    u_t=les.set_tendency_U(f_u,return_request=asynchronous)
+    v_t=les.set_tendency_V(f_v,return_request=asynchronous)
+    thl_t=les.set_tendency_THL(f_thl,return_request=asynchronous)
+    qt_t=les.set_tendency_QT(f_qt,return_request=asynchronous)
+    sp_t=les.set_tendency_surface_pressure(f_ps,return_request=asynchronous)
+    ql_t=les.set_tendency_QL(f_ql,return_request=asynchronous)  # used in experimental local qt nudging
+    ql_p_t=les.set_ref_profile_QL(ql,return_request=asynchronous)  # used in experimental variability nudging
     les.ql_ref = ql  # store ql profile from GCM, interpolated to the LES level
     # for another variant of variability nudging
     # transfer surface quantities
@@ -414,10 +414,10 @@ def set_les_forcings(les, gcm, async,firststep, profile, dt_gcm, factor, couple_
                             rainrate=rainrate.value_in(units.kg / units.m ** 2 / units.s) * 3600)
     if couple_surface:
         z0m, z0h, wt, wq = convert_surface_fluxes(les)
-        z0m_surf=les.set_z0m_surf(z0m, return_request=async)
-        z0h_surf=les.set_z0h_surf(z0h, return_request=async)
-        wt_surf=les.set_wt_surf(wt, return_request=async)
-        wq_surf=les.set_wq_surf(wq, return_request=async)
+        z0m_surf=les.set_z0m_surf(z0m, return_request=asynchronous)
+        z0h_surf=les.set_z0h_surf(z0h, return_request=asynchronous)
+        wt_surf=les.set_wt_surf(wt, return_request=asynchronous)
+        wq_surf=les.set_wq_surf(wq, return_request=asynchronous)
         if write:
             spio.write_les_data(les,
                                 z0m=z0m.value_in(units.m),
@@ -698,24 +698,24 @@ def variability_nudge(les, gcm, write=True):
 
 
 
-def get_les_profiles(les,async):
-    u_d = les.get_profile_U(return_request=async)
-    v_d = les.get_profile_V(return_request=async)
-    sp_d = les.get_presf(return_request=async)
-    rhof_d = les.get_rhof(return_request=async)
-    rhobf_d = les.get_rhobf(return_request=async)
-    thl_d = les.get_profile_THL(return_request=async)
-    qt_d = les.get_profile_QT(return_request=async)
-    ql_d = les.get_profile_QL(return_request=async)
-    ql_ice_d = les.get_profile_QL_ice(return_request=async)  # ql_ice is the ice part of QL
-    qr_d = les.get_profile_QR(return_request=async)
-    ps_d = les.get_surface_pressure(return_request=async)
-    t_d =  les.get_profile_T(return_request=async) 
+def get_les_profiles(les,asynchronous):
+    u_d = les.get_profile_U(return_request=asynchronous)
+    v_d = les.get_profile_V(return_request=asynchronous)
+    sp_d = les.get_presf(return_request=asynchronous)
+    rhof_d = les.get_rhof(return_request=asynchronous)
+    rhobf_d = les.get_rhobf(return_request=asynchronous)
+    thl_d = les.get_profile_THL(return_request=asynchronous)
+    qt_d = les.get_profile_QT(return_request=asynchronous)
+    ql_d = les.get_profile_QL(return_request=asynchronous)
+    ql_ice_d = les.get_profile_QL_ice(return_request=asynchronous)  # ql_ice is the ice part of QL
+    qr_d = les.get_profile_QR(return_request=asynchronous)
+    ps_d = les.get_surface_pressure(return_request=asynchronous)
+    t_d =  les.get_profile_T(return_request=asynchronous)
    # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     Zh = les.gcm_Zh
     zh = les.zh_cache
     # construct a mapping of indices between openIFS levels and Dales height levels
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
-    A = les.get_cloudfraction(indices,return_request=async) #[::-1]  # reverse order
-    rain = les.get_rain(return_request=async)
+    A = les.get_cloudfraction(indices,return_request=asynchronous) #[::-1]  # reverse order
+    rain = les.get_rain(return_request=asynchronous)
     return {"U": u_d, "V": v_d, "presf": sp_d,"Rhof": rhof_d,"Rhobf": rhobf_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d,  "QR": qr_d, "PS": ps_d,"T": t_d, "A": A, "Rain": rain} 

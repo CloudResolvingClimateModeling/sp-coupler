@@ -1,9 +1,8 @@
 # Superparameteriation coupling code for OpenIFS <--> Dales
 #
-# Fredrik Jansson, Gijs van den Oord 
-# 2017-2019
+# Fredrik Jansson, Gijs van den Oord, Maria Chertova
+# CWI, Netherlands eScience Center 2017 - 2019
 # 
-
 
 from __future__ import division
 from __future__ import print_function
@@ -13,19 +12,19 @@ import logging
 import os
 import shutil
 import threading
-from Queue import Queue  # note named queue in python 3
+#from Queue import Queue  # note named queue in python 3
 
 import datetime
 import numpy
 import sys
 import time
-
-import modfac
-import spcpl
-import sputils
-import spio
-import spmpi
 import psutil
+
+from . import modfac
+from . import spcpl
+from . import spio
+from . import spmpi
+from . import sputils
 
 from amuse.community import *
 from amuse.rfi import channel  # to query MPI threading support
@@ -56,7 +55,7 @@ les_run_dir = "dales-work"  # les run directory
 les_num_procs = 1  # MPI tasks per les instance
 les_redirect = "file"  # redirection for les
 les_forcing_factor = 1  # scale factor for forcings upon les
-les_queue_threads = sys.maxint  # les run scheduling (1: all serial, > 1: nr. of concurrent worker threads)
+les_queue_threads = 10000000 # sys.maxint  # les run scheduling (1: all serial, > 1: nr. of concurrent worker threads)
 max_num_les = -1  # Maximal number of LES instances
 init_les_state = True  # initialize les instances to the openifs column state
 output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../spifs-output")  # Output folder
@@ -115,7 +114,7 @@ def initialize(config, geometries, output_geometries=None):
     les_models = []
     lons = gcm_model.longitudes.value_in(units.deg)
     lats = gcm_model.latitudes.value_in(units.deg)
-    grid_indices = sputils.get_mask_indices(zip(lons, lats), geometries, max_num_les)
+    grid_indices = sputils.get_mask_indices(list(zip(lons, lats)), geometries, max_num_les)
     output_geoms = [] if output_geometries is None else output_geometries
     output_column_indices = sputils.get_mask_indices(zip(lons, lats), output_geoms)
     
@@ -157,9 +156,14 @@ def initialize(config, geometries, output_geometries=None):
     log.info("Successfully initialized GCM and %d LES instances" % len(les_models))
 
     # Switch off async in case any model doesn't support it
-    async_evolve = async_evolve and reduce(lambda p, q: p and q,
-                                           [getattr(m, "support_async", True) for m in [gcm_model] + les_models])
+    #async_evolve = async_evolve and reduce(lambda p, q: p and q,
+    #                                       [getattr(m, "support_async", True) for m in [gcm_model] + les_models])
+    # rewrite without reduce for Python 3 compatibility
+    for m in [gcm_model] + les_models:
+        if getattr(m, "support_async", True) == False:
+            async_evolve = False
 
+    
     if channel_type != "sockets":
 
         # the actual thread level provided by the MPI library
@@ -371,8 +375,8 @@ def step_spinup(les_list, work_queue, gcm, spinup_length):
     set_les_forcings_walltime = -time.time()
     pool = AsyncRequestsPool()
     for les in les_list:
-	if not firststep:
-	    profile=profiles[les]
+        if not firststep:
+            profile=profiles[les]
         req=spcpl.set_les_forcings(les, gcm, True,firststep, profile, dt_gcm=spinup_length| units.s, factor=les_spinup_forcing_factor, couple_surface=cplsurf, qt_forcing=qt_forcing)
         for r in req.values():
             pool.add_request(r)
@@ -559,15 +563,15 @@ def step_les_models(model_time, work_queue, offset=les_spinup):
             reqs = []
             profile_reqs={}
             pool = AsyncRequestsPool()
-	    for les in les_models:
-               req=les.evolve_model.asynchronous(model_time + (offset | units.s), exactEnd=True)
-	       reqs.append(req)
-               pool.add_request(req)
-               profiles=spcpl.get_les_profiles(les, True)
-               profile_reqs[les] = profiles
-	       for r in profiles.values():
-                   pool.add_request(r)
-            # now while the dales threads are working, sync the netcdf to disk
+            for les in les_models:
+                req=les.evolve_model.asynchronous(model_time + (offset | units.s), exactEnd=True)
+                reqs.append(req)
+                pool.add_request(req)
+                profiles=spcpl.get_les_profiles(les, True)
+                profile_reqs[les] = profiles
+                for r in profiles.values():
+                    pool.add_request(r)
+                # now while the dales threads are working, sync the netcdf to disk
             spio.sync_root()
 	    # wait for all threads
             #return pool, requests

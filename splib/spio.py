@@ -49,7 +49,7 @@ def init_netcdf(nc_name, oifs, les_models, datetime, output_columns=None, append
         for c in extra_cols:
             idx = c[0]
             cdf = cdf_root.groups[str(idx)]
-            print "Warning: untested restart with extra output columns"
+            print ("Warning: untested restart with extra output columns")
             output_column_cdf[idx] = cdf
     else:
         cdf_root = open_netcdf(nc_name, oifs, les_models[0] if any(les_models) else None, datetime)
@@ -230,7 +230,8 @@ def write_les_data(les, **kwargs):
     lock = kwargs.get("lock", False)
     if lock:
         cdf_lock.acquire()
-    for var, arr in kwargs.iteritems():
+    #for var, arr in kwargs.iteritems():
+    for var, arr in kwargs.items():
         if var == "lock":
             continue  # variable argument list nonsense
         ncvar = les.cdf.variables.get(var, None)

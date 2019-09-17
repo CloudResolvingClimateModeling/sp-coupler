@@ -7,6 +7,8 @@
 # 
 
 from __future__ import print_function
+from __future__ import division
+
 import argparse
 import logging
 
@@ -39,7 +41,7 @@ def parse_lat_lons(coordinate_list):
     if n % 2:
         log.info("Odd number of point components encountered... omitting the last latitude")
         coordinate_list = coordinate_list[0:n - 1]
-    return [(float(coordinate_list[2 * i + 1]) % 360, float(coordinate_list[2 * i])) for i in range(n / 2)]
+    return [(float(coordinate_list[2 * i + 1]) % 360, float(coordinate_list[2 * i])) for i in range(n // 2)]
     #      [(lon1, lat1), (lon2, lat2), ...]
     # % 360 on longitudes, to map negative longitudes to 180...360. Still doesn't handle polygons
     # over the 0-meridian
