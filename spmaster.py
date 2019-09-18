@@ -227,6 +227,11 @@ def main():
                         default="sp",
                         help="qt forcing type on LES (stimulate ql alignment with variance or local forcing)")
 
+    parser.add_argument("--linear_coarsening", dest="linear_coarsening",
+                        action="store_true",
+                        default=False,
+                        help="use linear intepolation when converting LES profiles to the GCM grid. Default is to integrate which is more conservative.")
+
 
     args = parser.parse_args()
 

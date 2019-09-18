@@ -17,65 +17,6 @@ log = logging.getLogger(__name__)
 
 # Superparametrization coupling methods
 
-def integral (a, b, z, q):
-    """
-    Calculate the integral from a to b of the piece-wise constant function q(z).
-    q(z) has the value q[i] on the interval from z[i] to z[i+1].
-    
-    Appropriate for integrating finite-volume quantities.
-
-
-    Parameters
-    ----------
-    a, b : interval end points
-    z : increasing array of point coordinates
-    q : array of function values (length one less than z)
-
-    
-    """
-    if len(z) != len(q) + 1:
-        print("len(z) should be len(q) + 1")
-    if a < z[0] or a > z[-1] or b < z[0] or b > z[-1]:
-        print("integral: Interval end point outside range.")
-        return None
-
-    sign = 1
-    if a > b:
-        sign = -1
-        a,b = b,a
-
-    ia = 0; ib = 0
-    while z[ia+1] < a:
-        ia += 1
-    while z[ib+1] < b:
-        ib += 1
-
-    # z[ia] <= a <= z[ia+1]   and   a <= b
-    # z[ib] <= b <= z[ib+1]
-    
-        
-    #print("integral: a=%f, ia=%d, z[ia],z[ia+1] = %f, %f"%(a, ia, z[ia], z[ia+1]))
-    #print("integral: b=%f, ib=%d, z[ib],z[ib+1] = %f, %f"%(b, ib, z[ib], z[ib+1]))
-
-
-    # sum intervals, including the full edge intervals
-    #S = 0
-    #for i in range(ia, ib+1):
-    #    S += q[i] * (z[i+1]-z[i])
-
-    # numpy version - sum intervals, including the full edge intervals
-    S = (q[ia:ib+1] * (z[ia+1:ib+2] - z[ia:ib+1])).sum() 
-        
-    # subtract edge intervals
-    Sa = q[ia] * (a - z[ia])
-    Sb = q[ib] * (z[ib+1] - b)
-
-    #print("integral: sum: %f"%S)
-    #print("integral: a-part: %f"%Sa)
-    #print("integral: b-part: %f"%Sb)
-    #print("integral: total %f"%((S - Sa - Sb)*sign))
-    return (S - Sa - Sb) * sign
-
 
 # Retrieves the les model cloud fraction
 def get_cloud_fraction(les):
@@ -441,7 +382,7 @@ def set_les_forcings(les, gcm, asynchronous, firststep, profile, dt_gcm, factor,
     return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t} 
 
 # Computes the LES tendencies upon the GCM:
-def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
+def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True, linear=False):
     U, V, T, SH, QL, QI, Pf, Ph, A, Zgfull, Zghalf = (getattr(les, varname, None) for varname in gcm_vars)
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
     Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.   
@@ -480,16 +421,71 @@ def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True):
                             t_=t_d.value_in(units.K),
                             qr=qr_d.value_in(units.mfu))
     # forcing
-    ft = dt_gcm 
+    ft = dt_gcm
+
+       
     # interpolate to GCM heights
-    t_d = sputils.interp(Zf, h, t_d)
-    qt_d = sputils.interp(Zf, h, qt_d)
-    ql_d = sputils.interp(Zf, h, ql_d)
-    ql_water_d = sputils.interp(Zf, h, ql_water_d)
-    ql_ice_d = sputils.interp(Zf, h, ql_ice_d)
-    u_d = sputils.interp(Zf, h, u_d)
-    v_d = sputils.interp(Zf, h, v_d)
-   
+
+    ## testing conservation of the intepolation scheme
+
+    # interpolate density 
+    #RHOBF = sputils.interp(Zf, h, rhobf_d)
+    #RHOBF2 = sputils.interp_rho(Zh, les.zh_cache, rhobf_d)
+    #print('RHOBF', RHOBF)
+    #print('RHOBF2', RHOBF2)
+
+    #
+    # H = 2742 | units.m
+    # print ('ql_d before interpolation', qt_d)
+    # I0 = sputils.integral(0 | units.m, H, les.zh_cache, qt_d * rhobf_d)
+    
+    # qt_dc= sputils.interp_c(Zh, les.zh_cache, qt_d, rhobf_d)
+    # qt_d = sputils.interp(Zf, h, qt_d)
+    # print ('qt_dc', qt_dc)
+    # print ('qt_d', qt_d)
+    
+    # Iold = sputils.integral(0 | units.m, H, Zh[::-1], (qt_d  * RHOBF2)[::-1])
+    # Ic = sputils.integral(0 | units.m, H, Zh[::-1], (qt_dc * RHOBF2)[::-1])
+    # print ('I0  ', I0)
+    # print ('Iold', Iold)
+    # print ('Ic  ', Ic)
+
+    # #qt_d = sputils.interp(Zf, h, qt_d)
+    # ql_d = sputils.interp(Zf, h, ql_d)
+    # ql_water_d = sputils.interp(Zf, h, ql_water_d)
+    # ql_ice_d = sputils.interp(Zf, h, ql_ice_d)
+    # u_d = sputils.interp(Zf, h, u_d)
+    # v_d = sputils.interp(Zf, h, v_d)
+
+    # print ('Zh', Zh)
+    # print ('Zf', Zf)
+    
+    #qt_d = sputils.interp(Zf, h, qt_d)
+    
+    if linear:
+        ## linear interpolation - not conservative
+        interp_time = time.time()
+        t_d = sputils.interp(Zf, h, t_d)
+        qt_d = sputils.interp(Zf, h, qt_d)
+        ql_d = sputils.interp(Zf, h, ql_d)
+        ql_water_d = sputils.interp(Zf, h, ql_water_d)
+        ql_ice_d = sputils.interp(Zf, h, ql_ice_d)
+        u_d = sputils.interp(Zf, h, u_d)
+        v_d = sputils.interp(Zf, h, v_d)
+        log.info("Linear interpolation took %6.2f ms"%((time.time()-interp_time)*1000))
+    else:
+        ## conservative interpolation
+        interp_time = time.time()
+        t_d        = sputils.interp_c(Zh, les.zh_cache,        t_d, rhobf_d)
+        qt_d       = sputils.interp_c(Zh, les.zh_cache,       qt_d, rhobf_d)
+        ql_d       = sputils.interp_c(Zh, les.zh_cache,       ql_d, rhobf_d)
+        ql_water_d = sputils.interp_c(Zh, les.zh_cache, ql_water_d, rhobf_d)
+        ql_ice_d   = sputils.interp_c(Zh, les.zh_cache,   ql_ice_d, rhobf_d)
+        u_d        = sputils.interp_c(Zh, les.zh_cache,        u_d, rhobf_d)
+        v_d        = sputils.interp_c(Zh, les.zh_cache,        v_d, rhobf_d)    
+        log.info("Conservative interpolation took %6.2f ms"%((time.time()-interp_time)*1000))
+    
+    
     # log.info("Height of LES system: %f" % h[-1])
     # first index in the openIFS colum which is inside the Dales system
     start_index = sputils.searchsorted(-Zf, -h[-1])

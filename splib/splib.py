@@ -1,6 +1,6 @@
 # Superparameteriation coupling code for OpenIFS <--> Dales
 #
-# Fredrik Jansson, Gijs van den Oord, Maria Chertova
+# Fredrik Jansson, Gijs van den Oord, Maria Chertova, Inti Pelupessy
 # CWI, Netherlands eScience Center 2017 - 2019
 # 
 
@@ -65,9 +65,10 @@ dryrun = False  # if true, only start the GCM to examine the grid.
 async_evolve = True  # time step LES instances using asynchronous amuse calls instead of Python threads (experimental)
 restart = False  # restart an old run
 cplsurf = False  # couple surface fields
-firststep = True # flag for this being the first step - experimentally used in restarts to not log the weird first step
-
 qt_forcing = "sp"
+linear_coarsening = False
+
+firststep = True # flag for this being the first step - experimentally used in restarts to not log the weird first step
 
 # Model instances:
 # Global circulation model
@@ -330,7 +331,7 @@ def step(work_queue=None):
     set_gcm_tendencies_walltime = -time.time()
     for les in les_models:
         profile=profiles[les]
-        spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les],dt_gcm=delta_t, factor=gcm_forcing_factor, write=writeCDF)
+        spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les],dt_gcm=delta_t, factor=gcm_forcing_factor, write=writeCDF, linear=linear_coarsening)
     set_gcm_tendencies_walltime += time.time()
     gcm_walltime2 = -time.time()
     gcm_model.evolve_model_from_cloud_scheme()
