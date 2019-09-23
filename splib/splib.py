@@ -66,7 +66,8 @@ async_evolve = True  # time step LES instances using asynchronous amuse calls in
 restart = False  # restart an old run
 cplsurf = False  # couple surface fields
 qt_forcing = "sp"
-linear_coarsening = False
+conservative_coarsening = False
+variability_nudge_constant_T = False
 
 firststep = True # flag for this being the first step - experimentally used in restarts to not log the weird first step
 
@@ -320,7 +321,8 @@ def step(work_queue=None):
     for les in les_models:
         if not firststep:
             profile=profiles[les]
-        req=spcpl.set_les_forcings(les, gcm_model,True, firststep, profile, dt_gcm=delta_t, factor=les_forcing_factor, couple_surface=cplsurf, qt_forcing=qt_forcing, write=writeCDF)
+        req=spcpl.set_les_forcings(les, gcm_model,True, firststep, profile, dt_gcm=delta_t, factor=les_forcing_factor, couple_surface=cplsurf,
+                                   qt_forcing=qt_forcing,variability_nudge_constant_T=variability_nudge_constant_T, write=writeCDF)
         for r in req.values():
             pool.add_request(r)
     pool.waitall()
@@ -331,7 +333,7 @@ def step(work_queue=None):
     set_gcm_tendencies_walltime = -time.time()
     for les in les_models:
         profile=profiles[les]
-        spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les],dt_gcm=delta_t, factor=gcm_forcing_factor, write=writeCDF, linear=linear_coarsening)
+        spcpl.set_gcm_tendencies(gcm_model, les, profile=profiles[les],dt_gcm=delta_t, factor=gcm_forcing_factor, write=writeCDF, conservative=conservative_coarsening)
     set_gcm_tendencies_walltime += time.time()
     gcm_walltime2 = -time.time()
     gcm_model.evolve_model_from_cloud_scheme()
