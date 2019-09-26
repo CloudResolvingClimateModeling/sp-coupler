@@ -252,6 +252,9 @@ def output_column_conversion(profile):
     c = sputils.rv / sputils.rd - 1  # epsilon^(-1) -1  = 0.61
     profile['Tv'] = profile['T'] * (1 + c * profile['SH'] - (profile['QL'] + profile['QI']))
 
+    Zghalf = profile['Zghalf']
+    Zgfull = profile['Zgfull']
+    
     Zh = (Zghalf-Zghalf[-1])/sputils.grav
     Zf = (Zgfull-Zghalf[-1])/sputils.grav
     

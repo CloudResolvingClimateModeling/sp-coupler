@@ -118,7 +118,7 @@ def initialize(config, geometries, output_geometries=None):
     lats = gcm_model.latitudes.value_in(units.deg)
     grid_indices = sputils.get_mask_indices(list(zip(lons, lats)), geometries, max_num_les)
     output_geoms = [] if output_geometries is None else output_geometries
-    output_column_indices = sputils.get_mask_indices(zip(lons, lats), output_geoms)
+    output_column_indices = sputils.get_mask_indices(list(zip(lons, lats)), output_geoms)
     
     # exclude columns with embedded LES from the output_column_indices 
     output_column_indices = list(set(output_column_indices) - set(grid_indices))

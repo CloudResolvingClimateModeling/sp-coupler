@@ -230,7 +230,6 @@ def write_les_data(les, **kwargs):
     lock = kwargs.get("lock", False)
     if lock:
         cdf_lock.acquire()
-    #for var, arr in kwargs.iteritems():
     for var, arr in kwargs.items():
         if var == "lock":
             continue  # variable argument list nonsense
@@ -253,7 +252,7 @@ def write_netCDF_data(column_index, **kwargs):
     lock = kwargs.get("lock", False)
     if lock:
         cdf_lock.acquire()
-    for var, arr in kwargs.iteritems():
+    for var, arr in kwargs.items():
         if var == "lock": continue  # variable argument list nonsense
         ncvar = cdf_handle.variables.get(var, None)
 
