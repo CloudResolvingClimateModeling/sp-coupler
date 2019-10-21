@@ -664,8 +664,8 @@ def variability_nudge(les, DT, constantT=False, write=True):
             q_min = get_ql_diff(beta_min)
             q_max = get_ql_diff(beta_max)
             if q_min > 0 or q_max < 0:
-                #log.info("k:%d didn't bracket a zero. qmin:%f, qmax:%f, qt_avg:%f, stdev(qt):%f " %
-                 #        (k, q_min, q_max, numpy.mean(qt[:, :, k]).number, numpy.std(qt[:, :, k]).number))
+                log.info("k:%d didn't bracket a zero. qmin:%f, qmax:%f, qt_avg:%f, stdev(qt):%f " %
+                         (k, q_min, q_max, numpy.mean(qt[:, :, k]), numpy.std(qt[:, :, k])))
                 # seems to happen easily in the sponge layer, where the variability is kept small
                 beta[k] = beta_max # take the largest beta, will trigger use of additive noise below.
             else:
@@ -697,20 +697,25 @@ def variability_nudge(les, DT, constantT=False, write=True):
  #                                                                     ql_ref[k].value_in(units.shu), beta[k],  numpy.log(beta[k]) / DT.value_in(units.s)))
         #print(k, current_ql_diff, ql_ref[k].value_in(units.shu), beta[k],  numpy.log(beta[k]) / DT.value_in(units.s))
         if beta[k] >= beta_max:
-            #log.info('  beta too large at %3d'%k)
-            beta[k] = 1 # don't do any multiplicative nudging on this layer
+            log.info('  beta %f too large at %3d'%(beta[k], k))
 
             # try additive noise instead
             a_min = 0
-            a_max = 2
+            a_max = 5
             tt = time.time()
-            a = brentq(get_ql_diff_additive, a_min, a_max)
-            print('additive brent took %5.2f ms'%((time.time()-tt)*1000))
-            #log.info('  additive noise st.dev a = %f'%a)
-            dQT = a * R
-            #les.fields[:,:,k].QT += dQT | units.shu              # works
-            #les.fields[:,:,k].QT = (qt[:,:,k] + dQT) | units.shu # doesn't work
-            qt[:,:,k] += dQT
+            log.info('ql_diff min:%f, max:%f. ql_ref[k] %f  current_ql_diff:%f'%(get_ql_diff_additive(a_min),get_ql_diff_additive(a_max), ql_ref[k], current_ql_diff))
+            log.info('ql_av: %f'%(ql_av[k]))
+            if ql_ref[k] > ql_av[k]:
+                a = brentq(get_ql_diff_additive, a_min, a_max)
+                log.info('additive brent took %5.2f ms'%((time.time()-tt)*1000))
+                #log.info('  additive noise st.dev a = %f'%a)
+                dQT = a * R
+                #les.fields[:,:,k].QT += dQT | units.shu              # works
+                #les.fields[:,:,k].QT = (qt[:,:,k] + dQT) | units.shu # doesn't work
+                qt[:,:,k] += dQT
+            else:
+                log.info('ql_ref[k] < ql_av[k] in additive nudge, doing nothing. %f %f.'%(ql_ref[k], ql_av[k]) )
+            beta[k] = 1 # we don't do any multiplicative nudging on this layer
         else:
             dQT = (beta[k]-1) * (qt[:,:,k] - qt_av[k])
             qt[:,:,k] += dQT
