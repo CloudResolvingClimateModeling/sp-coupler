@@ -137,36 +137,36 @@ levels are not on a fixed height but defined by pressure, they vary in time and 
 The most important variables are summarized below.
 
 
-| ---------------- | ------- | ----------------------------------------------------------- |
-| OpenIFS Variable | Unit    | Description                                                 |
-| ---------------- | ------- | ----------------------------------------------------------- |
-| lat, lon         | degrees | grid point coordinates                                      |
-| U,V              | m/s     | velocity components in x, y directions                      |
-| T                | K       | temperature                                                 |
-| SH               | kg/kg   | specific humidity (i.e. water vapor, not cloud condensate)  |
-| QL               | kg/kg   | specific cloud condensate, liquid                           |
-| QI               | kg/kg   | specific cloud condensate in the form of ice                |
-| QT               | kg/kg   | total specific humidity, SH+QL+QI                           |
-| Pf               | Pa      | pressure                                                    |
-| A                | -       | cloud fraction                                              |
-| f_U, f_V         | m/s^2   | forcings on global model                                    |
-| f_T              | K/s     |                                                             |
-| f_SH, f_QL, f_QI | kg/kg/s |                                                             |
-| ---------------- | ------- | ----------------------------------------------------------- |
 
-| ---------------- | ------- | ----------------------------------------------------------- |
-| DALES Variable   | Unit    | Description                                                 |
-| ---------------- | ------- | ----------------------------------------------------------- |
-| u, v             | m/s     | velocity components in x, y directions                      |
-| thl              | K       | liquid water potential temperature                          |
-| qt               | kg/kg   | total specific humidity                                     |
-| ql               | kg/kg   | condensed water specific humidity                           |
-| wthl             | K m/s   | surface heat flux                                           |
-| wqt              | m/s     | surface moisture flux                                       |
-| f_u, f_v         | m/s^2   | forcings on local model                                     |
-| f_thl            | K/s     |                                                             |
-| f_qt             | kg/kg/s |                                                             |
-| ---------------- | ------- | ----------------------------------------------------------- |
+OpenIFS Variable | Unit    | Description                                                
+---------------- | ------- | -----------------------------------------------------------
+lat, lon         | degrees | grid point coordinates                                     
+U,V              | m/s     | velocity components in x, y directions                     
+T                | K       | temperature                                                
+SH               | kg/kg   | specific humidity (i.e. water vapor, not cloud condensate) 
+QL               | kg/kg   | specific cloud condensate, liquid                          
+QI               | kg/kg   | specific cloud condensate in the form of ice               
+QT               | kg/kg   | total specific humidity, SH+QL+QI                          
+Pf               | Pa      | pressure                                                   
+A                | -       | cloud fraction                                             
+f_U, f_V         | m/s^2   | forcings on global model                                   
+f_T              | K/s     |                                                            
+f_SH, f_QL, f_QI | kg/kg/s |                                                            
+
+
+
+DALES Variable   | Unit    | Description                                                
+---------------- | ------- | -----------------------------------------------------------
+u, v             | m/s     | velocity components in x, y directions                     
+thl              | K       | liquid water potential temperature                         
+qt               | kg/kg   | total specific humidity                                    
+ql               | kg/kg   | condensed water specific humidity                          
+wthl             | K m/s   | surface heat flux                                          
+wqt              | m/s     | surface moisture flux                                      
+f_u, f_v         | m/s^2   | forcings on local model                                    
+f_thl            | K/s     |                                                            
+f_qt             | kg/kg/s |                                                            
+
 
 
 ## Requirements and manual installation procedure
