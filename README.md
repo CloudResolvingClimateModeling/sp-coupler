@@ -4,8 +4,13 @@
 
 This repository contains a script for running the global atmospheric model [OpenIFS](https://confluence.ecmwf.int/display/OIFS/OpenIFS+Home)
 coupled to local cloud-resolving LES simulations. The LES used is [DALES](https://github.com/dalesteam/dales),
-the Dutch Atmospheric Large Eddy Simulation. Interfaces to the models are built with [OMUSE](https://bitbucket.org/omuse/omuse/src/default/)
+the Dutch Atmospheric Large Eddy Simulation.
 
+A description of the coupling procedure and simulation results are given in 
+[Jansson, F., van den Oord, G., Pelupessy, I., Grönqvist, J. H., Siebesma, A. P., & Crommelin, D. (2019). Regional superparameterization in a global circulation model using large eddy simulations. Journal of Advances in Modeling Earth Systems, 11](https://doi.org/10.1029/2018MS001600)
+
+Interfaces to the models are built with [OMUSE](https://bitbucket.org/omuse/omuse/src/default/)
+The interfaces are documented in the [OMUSE documentation](https://omuse.readthedocs.io/en/latest/)
 
 ## Authors
 
@@ -110,6 +115,58 @@ timing.txt        CPU time statistics per time step for all models.
 
 OpenIFS and DALES can be configured as usual with their respective input files, in particular the type and frequency of the output they provide.
 See the model documentation for details.
+
+
+### Format of spifs.nc
+
+The output file spifs.nc contains vertical profiles of model variables and superparameterization tendencies
+for every superparameterized grid point and global model time step.
+The data is organized in groups according to the grid point where the model is located,
+for example all data for the DALES at grid point 888 is located in the group 888/ in the netCDF file.
+In general, variables in upper case relate to the global model, and variables in lower case relate to the local model.
+Forcings *on* the global model are denoted e.g. f_T, and on the local model f_thl.
+
+#### Vertical coordinates
+
+Profiles in the local model use `zf`, in the root group of the file, as vertical coordinate. These are constant in time and the same for all the local models.
+For the global model, the vertical coordinate is `Zf`, which depends on both the grid point and time (because the global model's
+levels are not on a fixed height but defined by pressure, they vary in time and space).
+
+#### Variables
+
+The most important variables are summarized below.
+
+================  ======= ===========================================================================
+OpenIFS Variable  Unit    Description
+================  ======= ===========================================================================
+lat, lon          degrees grid point coordinates
+U,V               m/s     velocity components in x, y directions
+T                 K       temperature
+SH                kg/kg   specific humidity (i.e. water vapor, not cloud condensate)
+QL                kg/kg   specific cloud condensate, liquid
+QI                kg/kg   specific cloud condensate in the form of ice
+QT                kg/kg   total specific humidity, SH+QL+QI
+Pf                Pa      pressure
+A                 -       cloud fraction
+f_U, f_V          m/s^2   forcings on global model
+f_T               K/s
+f_SH, f_QL, f_QI  kg/kg/s
+================  ======= ===========================================================================
+
+================  ======= ===========================================================================
+DALES Variable    Unit    Description
+================  ======= ===========================================================================
+u, v              m/s     velocity components in x, y directions
+thl               K       liquid water potential temperature
+qt                kg/kg   total specific humidity
+ql                kg/kg   condensed water specific humidity
+wthl              K m/s   surface heat flux
+wqt               m/s     surface moisture flux
+f_u, f_v          m/s^2   forcings on local model
+f_thl             K/s
+f_qt              kg/kg/s
+================  ======= ===========================================================================
+
 
 
 ## Requirements and manual installation procedure
