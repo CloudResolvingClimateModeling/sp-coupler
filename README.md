@@ -126,6 +126,9 @@ for example all data for the DALES at grid point 888 is located in the group 888
 In general, variables in upper case relate to the global model, and variables in lower case relate to the local model.
 Forcings *on* the global model are denoted e.g. f_T, and on the local model f_thl.
 
+The superparameterization coupler can also store profiles in spifs.nc for columns that are not superparameterized.
+The data for these columns then contain only quantities for the global model, there are no forcings and no local model quantities.
+
 #### Vertical coordinates
 
 Profiles in the local model use `zf`, in the root group of the file, as vertical coordinate. These are constant in time and the same for all the local models.
@@ -141,7 +144,7 @@ The most important variables are summarized below.
 OpenIFS Variable | Unit    | Description                                                
 ---------------- | ------- | -----------------------------------------------------------
 lat, lon         | degrees | grid point coordinates                                     
-U,V              | m/s     | velocity components in x, y directions                     
+U, V             | m/s     | velocity components in x, y directions                     
 T                | K       | temperature                                                
 SH               | kg/kg   | specific humidity (i.e. water vapor, not cloud condensate) 
 QL               | kg/kg   | specific cloud condensate, liquid                          
@@ -167,6 +170,10 @@ f_u, f_v         | m/s^2   | forcings on local model
 f_thl            | K/s     |                                                            
 f_qt             | kg/kg/s |                                                            
 
+
+#### Sample Python script for reading spifs.nc
+
+A sample python script for extracting data from the spifs.nc file is provided in `examples/access-spifs-nc.py`
 
 
 ## Requirements and manual installation procedure
@@ -399,12 +406,3 @@ make
 # note: this downloads OpenIFS, which requires ECMWF credentials
 
 ```
-
-
-
-
-
-
-		   
-		   
-		   
