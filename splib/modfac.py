@@ -7,9 +7,9 @@ import shutil
 
 from amuse.community import units
 
-import spdummy
-import ncmod
-import sputils
+from . import spdummy
+from . import ncmod
+from . import sputils
 
 # model type names
 dummy_type = "dummy"

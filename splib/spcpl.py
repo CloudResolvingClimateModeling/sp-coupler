@@ -4,8 +4,8 @@ import time
 import numpy
 import logging
 from omuse.units import units
-import sputils
-import spio
+from . import sputils
+from . import spio
 from scipy.optimize import brentq
 
 # ~ from brent import brentq

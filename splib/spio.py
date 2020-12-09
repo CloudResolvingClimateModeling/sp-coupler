@@ -49,7 +49,7 @@ def init_netcdf(nc_name, oifs, les_models, datetime, output_columns=None, append
         for c in extra_cols:
             idx = c[0]
             cdf = cdf_root.groups[str(idx)]
-            print "Warning: untested restart with extra output columns"
+            print ("Warning: untested restart with extra output columns")
             output_column_cdf[idx] = cdf
     else:
         cdf_root = open_netcdf(nc_name, oifs, les_models[0] if any(les_models) else None, datetime)

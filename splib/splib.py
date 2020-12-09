@@ -13,19 +13,20 @@ import logging
 import os
 import shutil
 import threading
-from Queue import Queue  # note named queue in python 3
+from queue import Queue  # note named queue in Python 3, Queue in Python 2
 
 import datetime
 import numpy
 import sys
 import time
-
-import modfac
-import spcpl
-import sputils
-import spio
-import spmpi
 import psutil
+
+from . import modfac
+from . import spcpl
+from . import sputils
+from . import spio
+from . import spmpi
+
 
 from amuse.community import *
 from amuse.rfi import channel  # to query MPI threading support
@@ -56,7 +57,7 @@ les_run_dir = "dales-work"  # les run directory
 les_num_procs = 1  # MPI tasks per les instance
 les_redirect = "file"  # redirection for les
 les_forcing_factor = 1  # scale factor for forcings upon les
-les_queue_threads = sys.maxint  # les run scheduling (1: all serial, > 1: nr. of concurrent worker threads)
+les_queue_threads = sys.maxsize  # les run scheduling (1: all serial, > 1: nr. of concurrent worker threads)
 max_num_les = -1  # Maximal number of LES instances
 init_les_state = True  # initialize les instances to the openifs column state
 output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../spifs-output")  # Output folder

@@ -20,7 +20,7 @@ DALESDIR=dales-input
 OUT=output
 
 
-mpiexec -n 1 python2 ./spmaster.py --steps 100  \
+mpiexec -n 1 python ./spmaster.py --steps 100  \
 --poly        20 -50  10 -50   10 -40   20 -40	\
 --gcmprocs $N_GCM --numles $N_LES --lesprocs $LES_PROCS  \
 --gcmdir=$OIFSDIR --gcmexp=TEST \

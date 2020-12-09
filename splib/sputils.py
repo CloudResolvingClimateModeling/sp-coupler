@@ -4,7 +4,7 @@ from omuse.units import units
 from amuse.units.quantities import to_quantity
 
 import logging
-import haversine
+from . import haversine
 import shapely.geometry
 
 # Logger
