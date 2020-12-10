@@ -157,8 +157,9 @@ def initialize(config, geometries, output_geometries=None):
     log.info("Successfully initialized GCM and %d LES instances" % len(les_models))
 
     # Switch off async in case any model doesn't support it
-    async_evolve = async_evolve and reduce(lambda p, q: p and q,
-                                           [getattr(m, "support_async", True) for m in [gcm_model] + les_models])
+    for m in [gcm_model] + les_models:
+        if not getattr(m, "support_async", True):
+            async_evolve = False
 
     if channel_type != "sockets":
 

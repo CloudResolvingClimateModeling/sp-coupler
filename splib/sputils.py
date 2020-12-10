@@ -60,13 +60,13 @@ def get_mask_indices(points, mask_geoms, nmax=-1):
                 dists = [haversine.haversine((p[0], p[1]), (g.x, g.y)) for p in points]
                 result.append(numpy.argmin(dists))
             else:
-                for i in range(len(points)):
-                    if g.contains(shapely.geometry.Point(points[i])): result.append(i)
+                for i,p in enumerate(points):
+                    if g.contains(shapely.geometry.Point(p)): result.append(i)
 
                     # try also with the grid point mapped to the -180 ... 180 interval
                     # 
-                    p = ((points[i][0] -180) % 360 - 180, points[i][1])
-                    if g.contains(shapely.geometry.Point(p)): result.append(i)
+                    q = ((p[0] -180) % 360 - 180, p[1])
+                    if g.contains(shapely.geometry.Point(q)): result.append(i)
                     
         result = list(set(result))  # remove duplicates
         return result

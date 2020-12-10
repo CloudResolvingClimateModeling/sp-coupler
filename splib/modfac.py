@@ -79,12 +79,11 @@ def create_model(model_type, inputdir, workdir, nprocs=1, redirect="file", chann
 #            log.info("Linking Dales input files from %s..." % inputdir)
 #            sputils.link_dir(files, workdir)
 
-
         dales = Dales(inputdir=inputdir,
                       number_of_workers=nprocs,
                       redirection=redirect,
-#                      redirect_stdout_file=ofile,  # ToDo
-#                      redirect_stderr_file=efile,
+                      redirect_stdout_file=ofile,  
+                      redirect_stderr_file=efile,
                       channel_type=channel_type,
                       workdir=workdir)  # , debugger='gdb')
         dales.parameters.restart_flag = restart

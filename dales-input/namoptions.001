@@ -1,5 +1,4 @@
 &RUN
-outfile    = 'dales.out'
 iexpnr     =  001
 lwarmstart =  .false.
 startfile  =  'initd00h01m000.001'
@@ -74,7 +73,6 @@ iadv_sv     =  0,52
 
 &NAMSUBGRID
 lsmagorinsky = .false.
-sgs_surface_fix = .false.
 /
 
 &NAMCHECKSIM
