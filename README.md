@@ -176,7 +176,62 @@ f_qt             | kg/kg/s |
 A sample python script for extracting data from the spifs.nc file is provided in `examples/access-spifs-nc.py`
 
 
-## Requirements and manual installation procedure
+# Requirements and manual installation procedure - Python 3 version
+
+As of Jan 2021, the Python 3 version is still experimental.
+
+## Cartesius
+
+```
+module load 2020
+module load netCDF-Fortran/4.5.2-gompi-2020a
+module load CMake/3.16.4-GCCcore-9.3.0
+module load FFTW/3.3.8-gompi-2020a
+module load Hypre/2.18.2-foss-2020a
+module load Python/3.8.2-GCCcore-9.3.0
+module load ecCodes/2.18.0-foss-2020a-Python-3.8.2
+# OpenMPI 4.0.3
+
+git clone https://github.com/omuse-geoscience/omuse/
+cd omuse
+python3 -m venv omuse_env_2000
+source omuse_env_2000/bin/activate
+
+pip install -e .
+
+export DOWNLOAD_CODES=all
+export SYST=gnu-fast
+
+# work-around for OMUSE not finding netCDF
+export DALES_FCFLAGS="`nf-config --flibs` -fdefault-real-8 -cpp"
+
+# install DALES
+python setup.py build_code --code-name dales   --inplace
+
+
+export OIFS_GRIB_API_DIR=/sw/arch/RedHatEnterpriseServer7/EB_production/2020/software/ecCodes/2.18.0-foss-2020a-Python-3.8.2
+export OIFS_GRIB_API_LIB="-L$OIFS_GRIB_API_DIR/lib -leccodes_f90"
+export GRIB_SAMPLES_PATH=$OIFS_GRIB_API_DIR/share/eccodes/ifs_samples/grib1_mlgrib2/
+export OIFS_LAPACK_LIB="-L/sw/arch/RedHatEnterpriseServer7/EB_production/2020/software/ScaLAPACK/2.1.0-gompi-2020a/lib -L/sw/arch/RedHatEnterpriseServer7/EB_production/2020/software/OpenBLAS/0.3.9-GCC-9.3.0/lib -lopenblas -lscalapack"
+
+# install open-ifs - requires ECMWF username/password
+python setup.py build_code --code-name oifs    --inplace
+
+pip install scipy moviepy matplotlib h5py shapely psutil
+# ERROR: pandas 1.0.3 requires pytz>=2017.2, which is not installed.  - ignoring this for now
+
+# install SP-coupler, this repository. Get the python3 branch.
+cd 
+pip install scipy moviepy matplotlib h5py shapely psutil
+git clone https://github.com/CloudResolvingClimateModeling/sp-coupler
+git checkout python3
+
+```
+
+# Requirements and manual installation procedure - Python 2 version 
+
+The following applies to the Python2 version, year 2020 or before.
+These instructions are becoming obsolete, since OMUSE has switched to Python 3.
 
 For initial tests, we recommend trying the Singularity image, since it simplifies the installation.
 The singularity recipe in the file `Singularity` can also be used as instructions for a manual setup.
