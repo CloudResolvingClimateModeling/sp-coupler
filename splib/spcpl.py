@@ -6,8 +6,9 @@ import logging
 from omuse.units import units
 from . import sputils
 from . import spio
+import sys
 from scipy.optimize import brentq
-
+from amuse.rfi.async_request import AsyncRequestsPool
 # ~ from brent import brentq
 
 # Logger
@@ -16,73 +17,14 @@ log = logging.getLogger(__name__)
 
 # Superparametrization coupling methods
 
-def integral (a, b, z, q):
-    """
-    Calculate the integral from a to b of the piece-wise constant function q(z).
-    q(z) has the value q[i] on the interval from z[i] to z[i+1].
-    
-    Appropriate for integrating finite-volume quantities.
-
-
-    Parameters
-    ----------
-    a, b : interval end points
-    z : increasing array of point coordinates
-    q : array of function values (length one less than z)
-
-    
-    """
-    if len(z) != len(q) + 1:
-        print("len(z) should be len(q) + 1")
-    if a < z[0] or a > z[-1] or b < z[0] or b > z[-1]:
-        print("integral: Interval end point outside range.")
-        return None
-
-    sign = 1
-    if a > b:
-        sign = -1
-        a,b = b,a
-
-    ia = 0; ib = 0
-    while z[ia+1] < a:
-        ia += 1
-    while z[ib+1] < b:
-        ib += 1
-
-    # z[ia] <= a <= z[ia+1]   and   a <= b
-    # z[ib] <= b <= z[ib+1]
-    
-        
-    #print("integral: a=%f, ia=%d, z[ia],z[ia+1] = %f, %f"%(a, ia, z[ia], z[ia+1]))
-    #print("integral: b=%f, ib=%d, z[ib],z[ib+1] = %f, %f"%(b, ib, z[ib], z[ib+1]))
-
-
-    # sum intervals, including the full edge intervals
-    #S = 0
-    #for i in range(ia, ib+1):
-    #    S += q[i] * (z[i+1]-z[i])
-
-    # numpy version - sum intervals, including the full edge intervals
-    S = (q[ia:ib+1] * (z[ia+1:ib+2] - z[ia:ib+1])).sum() 
-        
-    # subtract edge intervals
-    Sa = q[ia] * (a - z[ia])
-    Sb = q[ib] * (z[ib+1] - b)
-
-    #print("integral: sum: %f"%S)
-    #print("integral: a-part: %f"%Sa)
-    #print("integral: b-part: %f"%Sb)
-    #print("integral: total %f"%((S - Sa - Sb)*sign))
-    return (S - Sa - Sb) * sign
-
 
 # Retrieves the les model cloud fraction
 def get_cloud_fraction(les):
+    Zh = les.gcm_Zh
+    zh = les.zh_cache
     # construct a mapping of indices between openIFS levels and Dales height levels
-    Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.
-    zh = les.get_zh()
     indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
-    # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
+     # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
     A = les.get_cloudfraction(indices)[::-1]  # reverse order
     return A
 
@@ -277,7 +219,7 @@ def convert_profiles(les, write=True):
     #   Zf must be increasing, so reverse the gcm arrays
     #   outside the range of Zf, interp returns the first or the last point of the range
 
-    h = les.get_zf()
+    h = les.zf_cache
 
     thl = sputils.interp(h, Zf[::-1], thl_[::-1])
     qt = sputils.interp(h, Zf[::-1], qt_[::-1])
@@ -310,6 +252,9 @@ def output_column_conversion(profile):
     c = sputils.rv / sputils.rd - 1  # epsilon^(-1) -1  = 0.61
     profile['Tv'] = profile['T'] * (1 + c * profile['SH'] - (profile['QL'] + profile['QI']))
 
+    Zghalf = profile['Zghalf']
+    Zgfull = profile['Zgfull']
+    
     Zh = (Zghalf-Zghalf[-1])/sputils.grav
     Zf = (Zgfull-Zghalf[-1])/sputils.grav
     
@@ -351,27 +296,34 @@ def set_les_state(les, u, v, thl, qt, ps=None):
 
 # Computes and applies the forcings to the les model before time stepping,
 # relaxing it toward the gcm mean state.
-def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', write=True):
+def set_les_forcings(les, gcm, asynchronous, firststep, profile, dt_gcm, factor, couple_surface, qt_forcing='sp', write=True, variability_nudge_constant_T=False):
     u, v, thl, qt, ps, ql = convert_profiles(les)
-
     # get dales slab averages
-    u_d = les.get_profile_U()
-    v_d = les.get_profile_V()
-    thl_d = les.get_profile_THL()
-    qt_d = les.get_profile_QT()
-    ql_d = les.get_profile_QL()
-    ps_d = les.get_surface_pressure()
-
+    if firststep:
+        u_d = les.get_profile_U()
+        v_d = les.get_profile_V()
+        thl_d = les.get_profile_THL()
+        qt_d = les.get_profile_QT()
+        ql_d = les.get_profile_QL()
+        ps_d = les.get_surface_pressure()
+    else:
+        u_d = profile["U"]
+        v_d = profile["V"]
+        thl_d = profile["THL"]
+        qt_d = profile["QT"]
+        ql_d = profile["QL"]
+        ps_d = profile["PS"]
     try:
         rain_last = les.rain
     except:
         rain_last = 0 | units.kg / units.m ** 2
-    rain = les.get_rain()
+    if firststep:
+        rain = les.get_rain()
+    else:
+        rain = profile["Rain"] #les.get_rain()
     les.rain = rain
     rainrate = (rain - rain_last) / dt_gcm
-
     # ft = dt  # forcing time constant
-
     # forcing
     f_u = factor * (u - u_d) / dt_gcm
     f_v = factor * (v - v_d) / dt_gcm
@@ -379,14 +331,23 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
     f_qt = factor * (qt - qt_d) / dt_gcm
     f_ps = factor * (ps - ps_d) / dt_gcm
     f_ql = factor * (ql - ql_d) / dt_gcm
-
     # log.info("RMS forcings at %d during time step" % les.grid_index)
     # dt_gcm = gcm.get_timestep().value_in(units.s)
     # log.info("  u  : %f" % (sputils.rms(f_u)*dt_gcm))
     # log.info("  v  : %f" % (sputils.rms(f_v)*dt_gcm))
     # log.info("  thl: %f" % (sputils.rms(f_thl)*dt_gcm))
     # log.info("  qt : %f" % (sputils.rms(f_qt)*dt_gcm))
-
+    # set tendencies for Dales
+    u_t=les.set_tendency_U(f_u,return_request=asynchronous)
+    v_t=les.set_tendency_V(f_v,return_request=asynchronous)
+    thl_t=les.set_tendency_THL(f_thl,return_request=asynchronous)
+    qt_t=les.set_tendency_QT(f_qt,return_request=asynchronous)
+    sp_t=les.set_tendency_surface_pressure(f_ps,return_request=asynchronous)
+    ql_t=les.set_tendency_QL(f_ql,return_request=asynchronous)  # used in experimental local qt nudging
+    ql_p_t=les.set_ref_profile_QL(ql,return_request=asynchronous)  # used in experimental variability nudging
+    les.ql_ref = ql  # store ql profile from GCM, interpolated to the LES level
+    # for another variant of variability nudging
+    # transfer surface quantities
     # store forcings on dales in the statistics
     if write:
         spio.write_les_data(les, f_u=f_u.value_in(units.m / units.s ** 2),
@@ -395,80 +356,63 @@ def set_les_forcings(les, gcm, dt_gcm, factor, couple_surface, qt_forcing='sp', 
                             f_qt=f_qt.value_in(units.mfu / units.s),
                             rain=rain.value_in(units.kg / units.m ** 2),
                             rainrate=rainrate.value_in(units.kg / units.m ** 2 / units.s) * 3600)
-
-    # set tendencies for Dales
-    les.set_tendency_U(f_u)
-    les.set_tendency_V(f_v)
-    les.set_tendency_THL(f_thl)
-    les.set_tendency_QT(f_qt)
-    les.set_tendency_surface_pressure(f_ps)
-    les.set_tendency_QL(f_ql)  # used in experimental local qt nudging
-    les.set_ref_profile_QL(ql)  # used in experimental variability nudging
-
-    les.ql_ref = ql  # store ql profile from GCM, interpolated to the LES levels
-    # for another variant of variability nudging
-
-    # transfer surface quantities
     if couple_surface:
         z0m, z0h, wt, wq = convert_surface_fluxes(les)
-        les.set_z0m_surf(z0m)
-        les.set_z0h_surf(z0h)
-        les.set_wt_surf(wt)
-        les.set_wq_surf(wq)
+        z0m_surf=les.set_z0m_surf(z0m, return_request=asynchronous)
+        z0h_surf=les.set_z0h_surf(z0h, return_request=asynchronous)
+        wt_surf=les.set_wt_surf(wt, return_request=asynchronous)
+        wq_surf=les.set_wq_surf(wq, return_request=asynchronous)
         if write:
             spio.write_les_data(les,
                                 z0m=z0m.value_in(units.m),
                                 z0h=z0h.value_in(units.m),
                                 wthl=wt.value_in(units.m * units.s ** -1 * units.K),
                                 wqt=wq.value_in(units.m / units.s))
-
             spio.write_les_data(les,
                                 TLflux=les.TLflux.value_in(units.W / units.m ** 2),
                                 TSflux=les.TSflux.value_in(units.W / units.m ** 2),
                                 SHflux=les.SHflux.value_in(units.kg / units.m ** 2 / units.s),
                                 QLflux=les.QLflux.value_in(units.kg / units.m ** 2 / units.s),
                                 QIflux=les.QIflux.value_in(units.kg / units.m ** 2 / units.s))
-
     if qt_forcing == 'variance':
         if les.get_model_time() > 0 | units.s:
             starttime = time.time()
-            variability_nudge(les, gcm)
+            variability_nudge(les, dt_gcm, variability_nudge_constant_T) # note: asynchronous access not implemented
             walltime = time.time() - starttime
             log.info("variability nudge took %6.2f s" % walltime)
-
+    if couple_surface:
+        return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t, "Z0M_surf":z0m_surf, "Z0H_surf":z0h_surf, "WT_surf":wt_surf, "WQ_surf":wq_surf}
+    return {"U":u_t, "V":v_t, "THL":thl_t, "QT":qt_t, "SP":sp_t, "QL":ql_t, "QLp":ql_p_t} 
 
 # Computes the LES tendencies upon the GCM:
-def set_gcm_tendencies(gcm, les, factor=1, write=True):
+def set_gcm_tendencies(gcm, les, profile, dt_gcm, factor=1, write=True, conservative=False):
     U, V, T, SH, QL, QI, Pf, Ph, A, Zgfull, Zghalf = (getattr(les, varname, None) for varname in gcm_vars)
-
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.get_zf()
-    u_d = les.get_profile_U()
-    v_d = les.get_profile_V()
-    sp_d = les.get_presf()
-    rhof_d = les.get_rhof()
-    rhobf_d = les.get_rhobf()
-    thl_d = les.get_profile_THL()
-    qt_d = les.get_profile_QT()
-    ql_d = les.get_profile_QL()
-    ql_ice_d = les.get_profile_QL_ice()  # ql_ice is the ice part of QL
+    Zh = les.gcm_Zh  # half level heights. Ends with 0 for the ground.   
+    h = les.zf_cache
+    u_d = profile["U"]
+    v_d = profile["V"]
+    sp_d = profile["presf"]
+    rhof_d = profile["Rhof"]
+    rhobf_d = profile["Rhobf"]
+    thl_d = profile["THL"]
+    qt_d = profile["QT"]
+    ql_d = profile["QL"]
+    ql_ice_d = profile["QL_ice"]
     ql_water_d = ql_d - ql_ice_d  # ql_water is the water part of ql
-    qr_d = les.get_profile_QR()
-    A_d = get_cloud_fraction(les)
+    qr_d = profile["QR"]
+    A_d = profile["A"][::-1] 
     # dales state
     # dales.cdf.variables['presh'][gcm.step] = dales.get_presh().value_in(units.Pa) # todo associate with zh in netcdf
-
     # calculate real temperature from Dales' thl, qt, using the pressures from openIFS
     pf = sputils.interp(h, Zf[::-1], Pf[::-1])
     t = thl_d * sputils.exner(pf) + sputils.rlv * ql_d / sputils.cp
-
     # get real temperature from Dales - note it is calculated internally from thl and ql
-    t_d = les.get_profile_T()
-
+    t_d = profile["T"]
     if write:
         spio.write_les_data(les, u=u_d.value_in(units.m / units.s),
                             v=v_d.value_in(units.m / units.s),
-                            presf=sp_d.value_in(units.Pa),
+                            presf=sp_d.value_in(units.Pa),  
                             rhof=rhof_d.value_in(units.kg / units.m**3),
                             rhobf=rhobf_d.value_in(units.kg / units.m**3),
                             qt=qt_d.value_in(units.mfu),
@@ -479,23 +423,79 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
                             t=t.value_in(units.K),
                             t_=t_d.value_in(units.K),
                             qr=qr_d.value_in(units.mfu))
-
     # forcing
-    ft = gcm.get_timestep()  # should be the length of the NEXT time step
+    ft = dt_gcm
 
+       
     # interpolate to GCM heights
-    t_d = sputils.interp(Zf, h, t_d)
-    qt_d = sputils.interp(Zf, h, qt_d)
-    ql_d = sputils.interp(Zf, h, ql_d)
-    ql_water_d = sputils.interp(Zf, h, ql_water_d)
-    ql_ice_d = sputils.interp(Zf, h, ql_ice_d)
-    u_d = sputils.interp(Zf, h, u_d)
-    v_d = sputils.interp(Zf, h, v_d)
 
+    ## testing conservation of the intepolation scheme
+
+    # interpolate density 
+    #RHOBF = sputils.interp(Zf, h, rhobf_d)
+    #RHOBF2 = sputils.interp_rho(Zh, les.zh_cache, rhobf_d)
+    #print('RHOBF', RHOBF)
+    #print('RHOBF2', RHOBF2)
+
+    #
+    # H = 2742 | units.m
+    # print ('ql_d before interpolation', qt_d)
+    # I0 = sputils.integral(0 | units.m, H, les.zh_cache, qt_d * rhobf_d)
+    
+    # qt_dc= sputils.interp_c(Zh, les.zh_cache, qt_d, rhobf_d)
+    # qt_d = sputils.interp(Zf, h, qt_d)
+    # print ('qt_dc', qt_dc)
+    # print ('qt_d', qt_d)
+    
+    # Iold = sputils.integral(0 | units.m, H, Zh[::-1], (qt_d  * RHOBF2)[::-1])
+    # Ic = sputils.integral(0 | units.m, H, Zh[::-1], (qt_dc * RHOBF2)[::-1])
+    # print ('I0  ', I0)
+    # print ('Iold', Iold)
+    # print ('Ic  ', Ic)
+
+    # #qt_d = sputils.interp(Zf, h, qt_d)
+    # ql_d = sputils.interp(Zf, h, ql_d)
+    # ql_water_d = sputils.interp(Zf, h, ql_water_d)
+    # ql_ice_d = sputils.interp(Zf, h, ql_ice_d)
+    # u_d = sputils.interp(Zf, h, u_d)
+    # v_d = sputils.interp(Zf, h, v_d)
+
+    # print ('Zh', Zh)
+    # print ('Zf', Zf)
+    
+    #qt_d = sputils.interp(Zf, h, qt_d)
+    
+    if not conservative:
+        ## linear interpolation - not conservative
+        interp_time = time.time()
+        t_d = sputils.interp(Zf, h, t_d)
+        qt_d = sputils.interp(Zf, h, qt_d)
+        ql_d = sputils.interp(Zf, h, ql_d)
+        ql_water_d = sputils.interp(Zf, h, ql_water_d)
+        ql_ice_d = sputils.interp(Zf, h, ql_ice_d)
+        u_d = sputils.interp(Zf, h, u_d)
+        v_d = sputils.interp(Zf, h, v_d)
+        log.info("Linear interpolation took %6.2f ms"%((time.time()-interp_time)*1000))
+    else:
+        ## conservative interpolation
+        interp_time = time.time()
+        t_d        = sputils.interp_c(Zh, les.zh_cache,        t_d, rhobf_d)
+        qt_d       = sputils.interp_c(Zh, les.zh_cache,       qt_d, rhobf_d)
+        ql_d       = sputils.interp_c(Zh, les.zh_cache,       ql_d, rhobf_d)
+        ql_water_d = sputils.interp_c(Zh, les.zh_cache, ql_water_d, rhobf_d)
+        ql_ice_d   = sputils.interp_c(Zh, les.zh_cache,   ql_ice_d, rhobf_d)
+        u_d        = sputils.interp_c(Zh, les.zh_cache,        u_d, rhobf_d)
+        v_d        = sputils.interp_c(Zh, les.zh_cache,        v_d, rhobf_d)    
+        log.info("Conservative interpolation took %6.2f ms"%((time.time()-interp_time)*1000))
+    
+    
     # log.info("Height of LES system: %f" % h[-1])
     # first index in the openIFS colum which is inside the Dales system
     start_index = sputils.searchsorted(-Zf, -h[-1])
-
+   
+    # log.info("Height of LES system: %f" % h[-1])
+    # first index in the openIFS colum which is inside the Dales system
+    start_index = sputils.searchsorted(-Zf, -h[-1])
     # log.info("start_index: %d" % start_index)
 
     f_T = factor * (t_d - T) / ft
@@ -513,9 +513,24 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
     f_QL[0:start_index] *= 0
     f_QI[0:start_index] *= 0
     f_U[0:start_index] *= 0
+    # log.info("start_index: %d" % start_index) 
+    
+    f_T = factor * (t_d - T) / ft
+    f_SH = factor * ((qt_d - ql_d) - SH) / ft  # !!!!! -ql_d here - SH is vapour only.
+    f_QL = factor * (ql_water_d - QL) / ft  # condensed liquid water
+    f_QI = factor * (ql_ice_d - QI) / ft  # condensed water as ice
+    # f_QL = factor * (ql_d - (QL+QI)) / ft dales QL is both liquid and ice - f_QL is liquid only. this conserves
+    # water mass but makes an error in latent heat.
+    f_U = factor * (u_d - U) / ft
+    f_V = factor * (v_d - V) / ft
+    f_A = factor * (A_d - A) / ft
+    f_T[0:start_index] *= 0  # zero out the forcings above the Dales system
+    f_SH[0:start_index] *= 0  # TODO : taper off smoothly instead
+    f_QL[0:start_index] *= 0
+    f_QI[0:start_index] *= 0
+    f_U[0:start_index] *= 0
     f_V[0:start_index] *= 0
     f_A[0:start_index] *= 0
-
     # careful with double coriolis
     gcm.set_profile_tendency("U", les.grid_index, f_U)
 
@@ -538,7 +553,6 @@ def set_gcm_tendencies(gcm, les, factor=1, write=True):
                             f_QI=f_QI.value_in(units.mfu/units.s),
                             f_A=f_A.value_in(units.ccu/units.s)
         )
-
 # sets GCM forcings using values from the spifs.nc file
 # not used - was thught to be necessary for restarts, but it isn't
 def set_gcm_tendencies_from_file(gcm, les):
@@ -561,7 +575,7 @@ def write_les_profiles(les):
     U, V, T, SH, QL, QI, Pf, Ph, A, Zgfull, Zghalf = (getattr(les, varname, None) for varname in gcm_vars)
 
     Zf = les.gcm_Zf  # note: gcm Zf varies in time and space - must get it again after every step, for every column
-    h = les.get_zf()
+    h = les.zf_cache
     u_d = les.get_profile_U()
     v_d = les.get_profile_V()
     sp_d = les.get_presf()
@@ -595,9 +609,295 @@ def write_les_profiles(les):
                         qr=qr_d.value_in(units.mfu))
 
 
+# try without units, for speed.    
+def variability_nudge(les, DT, constantT=False, write=True):
+    # this cannot be used before the LES has been stepped - otherwise qsat and ql are not defined.
+
+    itot, jtot = les.get_itot(), les.get_jtot()
+        
+    # random field to be used for additive noise when variability is very small
+    # want same noise for each horizontal plane, to give correlation between different layers
+    R = numpy.random.normal(size=(itot, jtot)) # gaussian random field, mean=0, standard deviation=1
+    R -= R.sum()/(itot*jtot)  # adjust average of R to be exactly 0
+    
+    # possibly add spatial correlation
+    # R = scipy.ndimage.filters.gaussian_filter(R, sigma=2, mode='wrap')
+    # should normalize so that st-dev = 1 if we want a to be st.dev later on
+     
+    qsat = les.get_field("Qsat").number
+    qt = les.get_field("QT").number
+    ql_av = les.get_profile("QL").number
+    qt_av = les.get_profile("QT").number
+    p = les.get_presf()
+    ql_ref = les.ql_ref.number
+
+    if constantT:
+        thl = les.get_field("THL").number
+        ql = les.get_field("QL").number
+        
+
+    # get ql difference
+    # note the implicit k, qt, qt_av, qsat variables
+    # returns ql(beta) - ql_ref
+    def get_ql_diff(beta):
+        result = numpy.maximum((beta * (qt[:, :, k] - qt_av[k]) + qt_av[k] - qsat[:, :, k]), 0).sum() / (itot * jtot) - ql_ref[k]
+        return result
+
+    # get ql difference when using additive noise in R
+    # note the implicit k, qt, R, qsat variables
+    # returns ql(a) - ql_ref
+    def get_ql_diff_additive(a):
+        result = numpy.maximum((qt[:, :, k] + (a * R[:,:]) - qsat[:, :, k]), 0).sum() / (
+                itot * jtot) - ql_ref[k]
+        return result
+    
+
+    beta_min = 0  # search interval
+    beta_max = 5  # also limit for when to switch from multiplicative to additive noise
+
+    beta = numpy.ones(les.parameters_DOMAIN.kmax)
+    for k in range(0, les.parameters_DOMAIN.kmax):
+        current_ql_diff = get_ql_diff(1)
+
+        if ql_ref[k] > 1e-9:  # significant amount of clouds in the GCM. Nudge towards this amount.
+            # print (k, 'significant ql_ref')
+            q_min = get_ql_diff(beta_min)
+            q_max = get_ql_diff(beta_max)
+            if q_min > 0 or q_max < 0:
+                log.info("k:%d didn't bracket a zero. qmin:%f, qmax:%f, qt_avg:%f, stdev(qt):%f " %
+                         (k, q_min, q_max, numpy.mean(qt[:, :, k]), numpy.std(qt[:, :, k])))
+                # seems to happen easily in the sponge layer, where the variability is kept small
+                beta[k] = beta_max # take the largest beta, will trigger use of additive noise below.
+            else:
+                tt = time.time()
+                beta[k] = brentq(get_ql_diff, beta_min, beta_max)
+                print('brent took %5.2f ms'%((time.time()-tt)*1000))
+                
+        elif ql_av[k] > ql_ref[k]:  # The GCM says no clouds, or very little, and the LES has more than this.
+            # Nudge towards barely unsaturated.
+            i, j = numpy.unravel_index(numpy.argmax(qt[:, :, k] - qsat[:, :, k]), qt[:, :, k].shape)
+            beta[k] = (qsat[i, j, k] - qt_av[k]) / (qt[i, j, k] - qt_av[k])
+            # print (qt[i,j,k].value_in(units.mfu))
+            # print (qsat[i,j,k].value_in(units.mfu))
+            # print(qt_av[k].value_in(units.mfu))
+            # print(ql[k].value_in(units.mfu))
+            # print(les.ql_ref[k].value_in(units.mfu))
+            #log.info(
+            #    '%d nudging towards non-saturation. Max at (%d,%d). qt:%f, qsat:%f, qt_av[k]:%f, beta:%f, ql_avg:%f, '
+            #    'ql_ref:%f' % (k, i, j, qt[i, j, k].value_in(units.mfu), qsat[i, j, k].value_in(units.mfu),
+            #                   qt_av[k].value_in(units.mfu), beta[k], ql[k].value_in(units.mfu), ql_ref[k].value_in(units.mfu)))
+            if beta[k] < 0:
+                # this happens when qt_av > qsat
+  #              log.info('  beta<0, setting beta=1 ')
+                beta[k] = 1
+        else:
+            continue  # no nudge - don't print anything
+
+ #       log.info('k: %3d ql_diff: %e, ql_ref: %e, beta:%f, alpha:%f'%(k, current_ql_diff,
+ #                                                                     ql_ref[k].value_in(units.shu), beta[k],  numpy.log(beta[k]) / DT.value_in(units.s)))
+        #print(k, current_ql_diff, ql_ref[k].value_in(units.shu), beta[k],  numpy.log(beta[k]) / DT.value_in(units.s))
+        if beta[k] >= beta_max:
+            log.info('  beta %f too large at %3d'%(beta[k], k))
+
+            # try additive noise instead
+            a_min = 0
+            a_max = 5
+            tt = time.time()
+            log.info('ql_diff min:%f, max:%f. ql_ref[k] %f  current_ql_diff:%f'%(get_ql_diff_additive(a_min),get_ql_diff_additive(a_max), ql_ref[k], current_ql_diff))
+            log.info('ql_av: %f'%(ql_av[k]))
+            if ql_ref[k] > ql_av[k]:
+                a = brentq(get_ql_diff_additive, a_min, a_max)
+                log.info('additive brent took %5.2f ms'%((time.time()-tt)*1000))
+                #log.info('  additive noise st.dev a = %f'%a)
+                dQT = a * R
+                #les.fields[:,:,k].QT += dQT | units.shu              # works
+                #les.fields[:,:,k].QT = (qt[:,:,k] + dQT) | units.shu # doesn't work
+                qt[:,:,k] += dQT
+            else:
+                log.info('ql_ref[k] < ql_av[k] in additive nudge, doing nothing. %f %f.'%(ql_ref[k], ql_av[k]) )
+            beta[k] = 1 # we don't do any multiplicative nudging on this layer
+        else:
+            dQT = (beta[k]-1) * (qt[:,:,k] - qt_av[k])
+            qt[:,:,k] += dQT
+        if constantT:
+            #ql_target = numpy.maximum((beta[k] * (qt[:, :, k] - qt_av[k]) + qt_av[k] - qsat[:, :, k]), 0) # wrong!
+            #ql_target = numpy.maximum((qt[:, :, k] + (a * R[:,:]) - qsat[:, :, k]), 0)
+            #ql_target = numpy.maximum((qt[:, :, k] + dQT - qsat[:, :, k]), 0)
+            ql_target = numpy.maximum((qt[:, :, k] - qsat[:, :, k]), 0)
+            dQL = ql_target - ql[:,:,k]
+            dTHL = - sputils.rlv.number / (sputils.cp.number * sputils.exner(p[k])) * dQL
+            thl[:,:,k] += dTHL
+            #les.fields[:,:,k].THL += dTHL | units.K
+
+            
+    les.fields.QT = qt
+    if constantT:
+        les.fields.THL = thl | units.K
+
+    
+    ## gradual adjustment over time   !! NOTE !!  no THL adjustment here yet    
+    alpha = (numpy.log(beta) / DT.value_in(units.s)) # .minimum(0.05 | units.s**-1)
+    #print ('Setting alpha', alpha)
+    #les.set_qt_variability_factor(alpha)
+
+    qt_std = qt.std(axis=(0, 1))
+    if write:
+        spio.write_les_data(les, qt_alpha=alpha)
+        spio.write_les_data(les, qt_beta=beta, qt_std=qt_std)
+
+
+        
+def variability_nudge_units(les, DT, constantT=False, write=True):
+    # this cannot be used before the LES has been stepped - otherwise qsat and ql are not defined.
+
+    itot, jtot = les.get_itot(), les.get_jtot()
+        
+    # random field to be used for additive noise when variability is very small
+    # want same noise for each horizontal plane, to give correlation between different layers
+    R = numpy.random.normal(size=(itot, jtot)) # gaussian random field, mean=0, standard deviation=1
+    R -= R.sum()/(itot*jtot)  # adjust average of R to be exactly 0
+    
+    # possibly add spatial correlation
+    # R = scipy.ndimage.filters.gaussian_filter(R, sigma=2, mode='wrap')
+    # should normalize so that st-dev = 1 if we want a to be st.dev later on
+     
+    qsat = les.get_field("Qsat")
+    qt = les.get_field("QT")
+    ql = les.get_profile("QL")
+
+    qt_av = les.get_profile("QT")
+    p = les.get_presf()
+
+
+    # ql = (qt - qsat).maximum(0 | units.mfu).sum(axis=(0, 1)) / (itot * jtot)  # ql profile
+
+    ql_field = les.get_field("QL")
+    ql_ref = les.ql_ref
+    
+    # strangely, this doesn't have a unit
+    # the part before / has the unit mfu
+    # mfu is dimensionless - might be the reason.
+    # use mean instead of sum / size  ?
+
+    # ql_ref has unit mfu
+
+    # print('---', les.lat, les.lon, '---')
+    # print(les.QL)
+    # print(les.ql_ref)
+    # print(ql)
+    # print(ql2)
+    # print(les.get_itot(), les.get_jtot())
+    # print ('---------')
+
+    # get ql difference
+    # note the implicit k, qt, qt_av, qsat variables
+    # returns ql(beta) - ql_ref
+    def get_ql_diff(beta):
+        result = (beta * (qt[:, :, k] - qt_av[k]) + qt_av[k] - qsat[:, :, k]).maximum(0 | units.mfu).sum() / (itot * jtot) - ql_ref[k]
+        return result.number
+
+    # get ql difference when using additive noise in R
+    # note the implicit k, qt, R, qsat variables
+    # returns ql(a) - ql_ref
+    def get_ql_diff_additive(a):
+        result = (qt[:, :, k] + ((a | units.mfu) * R[:,:]) - qsat[:, :, k]).maximum(0 | units.mfu).sum() / (
+                itot * jtot) - ql_ref[k]
+        return result.number
+    
+
+    beta_min = 0  # search interval
+    beta_max = 5  # also limit for when to switch from multiplicative to additive noise
+
+    beta = numpy.ones(les.parameters_DOMAIN.kmax)
+    for k in range(0, les.parameters_DOMAIN.kmax):
+        current_ql_diff = get_ql_diff(1)
+
+        if ql_ref[k] > 1e-9:  # significant amount of clouds in the GCM. Nudge towards this amount.
+            # print (k, 'significant ql_ref')
+            q_min = get_ql_diff(beta_min)
+            q_max = get_ql_diff(beta_max)
+            if q_min > 0 or q_max < 0:
+                #log.info("k:%d didn't bracket a zero. qmin:%f, qmax:%f, qt_avg:%f, stdev(qt):%f " %
+                 #        (k, q_min, q_max, numpy.mean(qt[:, :, k]).number, numpy.std(qt[:, :, k]).number))
+                # seems to happen easily in the sponge layer, where the variability is kept small
+                beta[k] = beta_max # take the largest beta, will trigger use of additive noise below.
+            else:
+                #tt = time.time()
+                beta[k] = brentq(get_ql_diff, beta_min, beta_max)
+                #print('brent took %5.2f ms'%((time.time()-tt)*1000))
+                
+        elif ql[k] > ql_ref[k]:  # The GCM says no clouds, or very little, and the LES has more than this.
+            # Nudge towards barely unsaturated.
+            i, j = numpy.unravel_index(numpy.argmax(qt[:, :, k] - qsat[:, :, k]), qt[:, :, k].shape)
+            beta[k] = (qsat[i, j, k] - qt_av[k]) / (qt[i, j, k] - qt_av[k])
+            # print (qt[i,j,k].value_in(units.mfu))
+            # print (qsat[i,j,k].value_in(units.mfu))
+            # print(qt_av[k].value_in(units.mfu))
+            # print(ql[k].value_in(units.mfu))
+            # print(les.ql_ref[k].value_in(units.mfu))
+            #log.info(
+            #    '%d nudging towards non-saturation. Max at (%d,%d). qt:%f, qsat:%f, qt_av[k]:%f, beta:%f, ql_avg:%f, '
+            #    'ql_ref:%f' % (k, i, j, qt[i, j, k].value_in(units.mfu), qsat[i, j, k].value_in(units.mfu),
+            #                   qt_av[k].value_in(units.mfu), beta[k], ql[k].value_in(units.mfu), ql_ref[k].value_in(units.mfu)))
+            if beta[k] < 0:
+                # this happens when qt_av > qsat
+  #              log.info('  beta<0, setting beta=1 ')
+                beta[k] = 1
+        else:
+            continue  # no nudge - don't print anything
+
+ #       log.info('k: %3d ql_diff: %e, ql_ref: %e, beta:%f, alpha:%f'%(k, current_ql_diff,
+ #                                                                     ql_ref[k].value_in(units.shu), beta[k],  numpy.log(beta[k]) / DT.value_in(units.s)))
+        #print(k, current_ql_diff, ql_ref[k].value_in(units.shu), beta[k],  numpy.log(beta[k]) / DT.value_in(units.s))
+        if beta[k] >= beta_max:
+            #log.info('  beta too large at %3d'%k)
+            beta[k] = 1 # don't do any multiplicative nudging on this layer
+
+            # try additive noise instead
+            a_min = 0
+            a_max = 2
+            tt = time.time()
+            a = brentq(get_ql_diff_additive, a_min, a_max)
+            print('additive brent took %5.2f ms'%((time.time()-tt)*1000))
+            #log.info('  additive noise st.dev a = %f'%a)
+            dQT = (a|units.mfu) * R
+            les.fields[:,:,k].QT += dQT
+            # les.fields[:,:,k].QT = qt[:,:,k] + dQT # doesn't work?
+            if constantT:
+                ql_target = (beta[k] * (qt[:, :, k] - qt_av[k]) + qt_av[k] - qsat[:, :, k]).maximum(0 | units.mfu)
+                dQL = ql_target - ql_field[:,:,k]
+                dTHL = - sputils.rlv / (sputils.cp * sputils.exner(p[k])) * dQL
+                les.fields[:,:,k].THL += dTHL
+            
+    # immediate adjustment of the qt and THL fields
+    for k in range(0, les.parameters_DOMAIN.kmax):
+        dQT = (beta[k]-1) * (qt[:,:,k] - qt_av[k])
+        les.fields[:,:,k].QT +=  dQT
+        #les.fields[:,:,k].QT = qt[:,:,k] + dQT doesn't work?
+        if constantT:
+            ql_target = (beta[k] * (qt[:, :, k] - qt_av[k]) + qt_av[k] - qsat[:, :, k]).maximum(0 | units.mfu)
+            dQL = ql_target - ql_field[:,:,k]
+            dTHL = - sputils.rlv / (sputils.cp * sputils.exner(p[k])) * dQL
+            les.fields[:,:,k].THL += dTHL
+
+    # now one read, one write per horizontal layer to Dales. Could do calculations in place and send all at once.
+    # simple: replace += with qt[] + dQT
+
+    
+    ## gradual adjustment over time   !! NOTE !!  no THL adjustment here yet    
+    alpha = (numpy.log(beta) / DT) # .minimum(0.05 | units.s**-1)
+    #print ('Setting alpha', alpha)
+    #les.set_qt_variability_factor(alpha)
+
+    qt_std = qt.std(axis=(0, 1))
+    if write:
+        spio.write_les_data(les, qt_alpha=alpha.value_in(1 / units.s))
+        spio.write_les_data(les, qt_beta=beta, qt_std=qt_std.value_in(units.mfu))
+
+    
 # TODO this routine sometimes hangs for a very long time, especially if it is called when
 # variance nudging is not enabled in the LES
-def variability_nudge(les, gcm, write=True):
+def variability_nudge_old(les, gcm, write=True):
     # this cannot be used before the LES has been stepped - otherwise qsat and ql are not defined.
 
     qsat = les.get_field("Qsat")
@@ -635,8 +935,8 @@ def variability_nudge(les, gcm, write=True):
     beta_min = 0  # search interval
     beta_max = 2000
 
-    beta = numpy.ones(les.k)
-    for k in range(0, les.k):
+    beta = numpy.ones(les.parameters_DOMAIN.kmax)
+    for k in range(0, les.parameters_DOMAIN.kmax):
         current_ql_diff = get_ql_diff(1)
 
         if les.ql_ref[k] > 1e-9:  # significant amount of clouds in the GCM. Nudge towards this amount.
@@ -680,3 +980,27 @@ def variability_nudge(les, gcm, write=True):
     if write:
         spio.write_les_data(les, qt_alpha=alpha.value_in(1 / units.s))
         spio.write_les_data(les, qt_beta=beta, qt_std=qt_std.value_in(units.mfu))
+
+
+
+def get_les_profiles(les,asynchronous):
+    u_d = les.get_profile_U(return_request=asynchronous)
+    v_d = les.get_profile_V(return_request=asynchronous)
+    sp_d = les.get_presf(return_request=asynchronous)
+    rhof_d = les.get_rhof(return_request=asynchronous)
+    rhobf_d = les.get_rhobf(return_request=asynchronous)
+    thl_d = les.get_profile_THL(return_request=asynchronous)
+    qt_d = les.get_profile_QT(return_request=asynchronous)
+    ql_d = les.get_profile_QL(return_request=asynchronous)
+    ql_ice_d = les.get_profile_QL_ice(return_request=asynchronous)  # ql_ice is the ice part of QL
+    qr_d = les.get_profile_QR(return_request=asynchronous)
+    ps_d = les.get_surface_pressure(return_request=asynchronous)
+    t_d =  les.get_profile_T(return_request=asynchronous)
+   # right: when heights are equal, return the largest index, discard last entry(ground=0) and reverse order
+    Zh = les.gcm_Zh
+    zh = les.zh_cache
+    # construct a mapping of indices between openIFS levels and Dales height levels
+    indices = sputils.searchsorted(zh, Zh, side="right")[:-1:][::-1]  # find indices in zh corresponding to Oifs levels
+    A = les.get_cloudfraction(indices,return_request=asynchronous) #[::-1]  # reverse order
+    rain = les.get_rain(return_request=asynchronous)
+    return {"U": u_d, "V": v_d, "presf": sp_d,"Rhof": rhof_d,"Rhobf": rhobf_d, "THL": thl_d, "QT": qt_d, "QL": ql_d, "QL_ice": ql_ice_d,  "QR": qr_d, "PS": ps_d,"T": t_d, "A": A, "Rain": rain} 

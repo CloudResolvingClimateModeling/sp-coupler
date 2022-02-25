@@ -7,6 +7,8 @@
 # 
 
 from __future__ import print_function
+from __future__ import division
+
 import argparse
 import logging
 
@@ -224,6 +226,16 @@ def main():
                         type=str,
                         default="sp",
                         help="qt forcing type on LES (stimulate ql alignment with variance or local forcing)")
+
+    parser.add_argument("--conservative_coarsening", dest="conservative_coarsening",
+                        action="store_true",
+                        default=False,
+                        help="use linear intepolation when converting LES profiles to the GCM grid. Default is to integrate which is more conservative.")
+
+    parser.add_argument("--variability_nudge_constant_T", dest="variability_nudge_constant_T",
+                        action="store_true",
+                        default=False,
+                        help="nudge qt variability at constant T (when qt_forcing=variance)")
 
 
     args = parser.parse_args()

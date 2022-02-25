@@ -89,3 +89,109 @@ def searchsorted(a,v,**kwargs):
     a=to_quantity(a)
     v=to_quantity(v)
     return numpy.searchsorted(a.value_in(a.unit), v.value_in(a.unit), **kwargs)
+
+
+def integral (a, b, z, q, w=None):
+    """
+    Calculate the integral from a to b of the piece-wise constant function q(z).
+    q(z) has the value q[i] on the interval from z[i] to z[i+1].
+    
+    Appropriate for integrating finite-volume quantities.
+    For DALES arrays, z are half-level heights (zf).
+
+
+    Parameters
+    ----------
+    a, b : interval end points
+    z : increasing array of point coordinates
+    q : array of function values (length one less than z)
+    w : weight array, shaped as q. Optional.
+    
+    """
+    if len(z) != len(q) + 1:
+        print("len(z) should be len(q) + 1. len(z)=%d, len(q) = %d",(len(z), len(q)))
+    if a < z[0] or a > z[-1] or b < z[0] or b > z[-1]:
+        print("integral: Interval end point outside range.")
+        return None
+
+    sign = 1
+    if a > b:
+        sign = -1
+        a,b = b,a
+
+    ia = 0    # begin index
+    while z[ia+1] < a:
+        ia += 1
+    ib = ia   # end index. ib >= ia
+    while z[ib+1] < b:
+        ib += 1
+
+    # z[ia] <= a <= z[ia+1]   and   a <= b
+    # z[ib] <= b <= z[ib+1]
+    
+        
+    #print("integral: a=%f, ia=%d, z[ia],z[ia+1] = %f, %f"%(a, ia, z[ia], z[ia+1]))
+    #print("integral: b=%f, ib=%d, z[ib],z[ib+1] = %f, %f"%(b, ib, z[ib], z[ib+1]))
+
+
+    # sum intervals, including the full edge intervals
+    #S = 0
+    #for i in range(ia, ib+1):
+    #    S += q[i] * (z[i+1]-z[i])
+
+    if w is None:
+        # numpy version - sum intervals, including the full edge intervals
+        S = (q[ia:ib+1] * (z[ia+1:ib+2] - z[ia:ib+1])).sum() 
+        
+        # subtract edge intervals    
+        Sa = q[ia] * (a - z[ia])
+        Sb = q[ib] * (z[ib+1] - b)
+
+        return (S - Sa - Sb) * sign
+    else:
+        S = (w[ia:ib+1] * q[ia:ib+1] * (z[ia+1:ib+2] - z[ia:ib+1])).sum()         
+        # subtract edge intervals    
+        Sa = w[ia] * q[ia] * (a - z[ia])
+        Sb = w[ib] * q[ib] * (z[ib+1] - b)
+
+        Sw = (w[ia:ib+1] * (z[ia+1:ib+2] - z[ia:ib+1])).sum()         
+        # subtract edge intervals    
+        Swa = w[ia] * (a - z[ia])
+        Swb = w[ib] * (z[ib+1] - b)
+        return  (S - Sa - Sb) / (Sw - Swa - Swb) * sign
+        
+
+# Optimizations:
+# * construct matrix of weights (sparse or with start, end indices)
+#   weights depend on rho, Zh, zh
+#   same weights can be used for all quantities
+#
+# * use end index of previous integration as starting index for next
+#
+# * when searching for end index, start at begin index DONE
+
+def interp_c(Zh, zh, q, rho):
+    
+    """ conservative interpolation from fine to coarse levels.
+    Zh is in descending order, zh in ascending order.
+    returns array Q: Q[i] = integral of q(z) from Zh[i+1] to Zh[i] weighted by rho(z)
+
+    """
+    zz = zh.value_in(units.m) # dropping units for speed
+    ZZ = Zh.value_in(units.m)
+    qq = q.number
+    rho2 = rho.number
+    
+    Q = numpy.zeros(len(Zh)-1)
+    for i in range(len(Q)):
+        if Zh[i] < zh[-1]:        
+            Q[i] = integral (ZZ[i+1], ZZ[i], zz, qq, rho2)
+    return Q | q.unit
+
+def interp_rho(Zh, zh, rho):
+    """ interpolate a density rho to a coarser grid """
+    RHO = numpy.zeros(len(Zh)-1) | rho.unit
+    for i in range(len(RHO)):
+        if Zh[i] < zh[-1]:
+            RHO[i] = integral (Zh[i+1], Zh[i], zh, rho) / (Zh[i] - Zh[i+1])
+    return RHO

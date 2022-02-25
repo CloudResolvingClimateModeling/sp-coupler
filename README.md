@@ -7,6 +7,7 @@ coupled to local cloud-resolving LES simulations. The LES used is [DALES](https:
 the Dutch Atmospheric Large Eddy Simulation.
 
 A description of the coupling procedure and simulation results are given in 
+
 Jansson, F., van den Oord, G., Pelupessy, I., Grönqvist, J. H., Siebesma, A. P., & Crommelin, D. (2019). Regional superparameterization in a global circulation model using large eddy simulations. [Journal of Advances in Modeling Earth Systems, 11](https://doi.org/10.1029/2018MS001600)
 
 Interfaces to the models are built with [OMUSE](https://bitbucket.org/omuse/omuse/src/default/).
@@ -14,7 +15,7 @@ The interfaces are documented in the [OMUSE documentation](https://omuse.readthe
 
 ## Authors
 
-Fredrik Jansson (CWI, Amsterdam),
+Fredrik Jansson (TU Delft and CWI, Amsterdam),
 Gijs van den Oord (Netherlands e-Science center, Amsterdam),
 Inti Pelupessy (Netherlands e-Science center, Amsterdam),
 Maria Chertova (Netherlands e-Science center, Amsterdam),
@@ -178,8 +179,6 @@ A sample python script for extracting data from the spifs.nc file is provided in
 
 # Requirements and manual installation procedure - Python 3 version
 
-As of Jan 2021, the Python 3 version is still experimental.
-
 ## Cartesius
 
 ```
@@ -220,11 +219,10 @@ python setup.py build_code --code-name oifs    --inplace
 pip install scipy moviepy matplotlib h5py shapely psutil
 # ERROR: pandas 1.0.3 requires pytz>=2017.2, which is not installed.  - ignoring this for now
 
-# install SP-coupler, this repository. Get the python3 branch.
+# install SP-coupler, this repository. 
 cd 
 pip install scipy moviepy matplotlib h5py shapely psutil
 git clone https://github.com/CloudResolvingClimateModeling/sp-coupler
-git checkout python3
 
 ```
 
@@ -336,8 +334,8 @@ module load eccodes
 # https proxy
 export https_proxy=proxy:2222
 
-export AMUSE=$PERM/amuse
-export PYTHONPATH=$PYTHONPATH:$AMUSE/src/
+export AMUSE_DIR=$PERM/2019/amuse/
+export PYTHONPATH=$PYTHONPATH:$AMUSE_DIR/src/
 
 source $PERM/meteo/bin/activate
 
@@ -410,12 +408,29 @@ FJ tried to compile mpi4py with the gnu compiler (`prgenvswitchto gnu`). Compila
 
 [Source for mpi4py instructions](http://jaist-hpc.blogspot.com/2015/02/mpi4py.html)
 
+The following instructions install omuse and amuse sibe by side in the directory $PERM/2019/.
+Then a symlink in amuse/src is created, to omuse/src/omuse, so that the path amuse/src/omuse/community still works.
+
+### OMUSE
+
+```
+cd $PERM/2019
+hg clone --insecure https://bitbucket.org/omuse/omuse
+```
+
+
 ### Amuse
 
 ```
 git clone https://github.com/fjansson/amuse
 cd amuse
 git checkout spawnless
+
+cd src
+ln -s $PERM/2019/omuse/src/omuse omuse
+# so that the old path amuse/src/omuse/community still works
+
+cd ..
 ```
 
 This version is our own no-spawn fork for use at ECMWF. Elsewhere, the official amuse can be used:
@@ -432,14 +447,6 @@ export PYTHON=python
 make framework
 ```
 
-### OMUSE
-
-```
-cd $PERM/amuse/src
-hg clone --insecure https://bitbucket.org/omuse/omuse
-cd omuse
-hg checkout meteo  # note: this step will be dropped, meteo will be merged into master
-```
 
 ### OpenIFS and DALES
 OpenIFS and DALES can be cloned using the OMUSE make file.
@@ -449,6 +456,10 @@ export DOWNLOAD_CODES=all
 # DOWNLOAD_CODES=all will checkout entire repo with ssh, intended for developers of the components.
 # DOWNLOAD_CODES=latest will (shallow) checkout latest revision only
 # DOWNLOAD_CODES=<anything else> will (shallow) checkout release tag spifs_v1.0.0
+
+export AMUSE_DIR=$PERM/2019/amuse/
+export PYTHONPATH=$PYTHONPATH:$AMUSE_DIR/src/
+export PATH=$PATH:$AMUSE_DIR/bin/
 ```
 
 ```
